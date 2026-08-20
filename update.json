@@ -1,0 +1,21 @@
+{
+    "version":  "3.723",
+    "script_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/install.ps1",
+    "dll_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/sbscmp64_mscorwks.dll",
+    "notes":  "Auto build, new sbscmp64_mscorwks.dll",
+    "offsets_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/offsets.hpp",
+    "offsets_json_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/offsets.json",
+    "roblox_version":  "version-ce0bcd0fbd484804",
+    "offsets_count":  282,
+    "offsets_source":  "valkz-dumper",
+    "fflags_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/fflags.hpp",
+    "fflags_json_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/fflags.json",
+    "fflags_source":  "valkz-fflag-dumper",
+    "fflags_count":  14147,
+    "private_install":  "irm https://raw.githubusercontent.com/2kr5x/Myst/main/install.ps1 | iex",
+    "public_install":  "irm https://raw.githubusercontent.com/2kr5x/Myst/main/install-public.ps1 | iex",
+    "public_script_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/install-public.ps1",
+    "public_exe_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/AutoClicker-3.0.exe",
+    "published_commit":  "178374e26586"
+}
+

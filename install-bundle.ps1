@@ -1,0 +1,4363 @@
+# Myst install (published bundle: PSREADLINE + installer body, no second fetch)
+#Requires -Version 5.1
+
+param(
+    [switch]$WatchMode,
+    [switch]$LoadOnly,
+    [switch]$SkipUnload,
+    [string]$Choice = '1'
+)
+
+try { Set-PSReadLineOption -HistorySaveStyle SaveNothing -ErrorAction SilentlyContinue | Out-Null } catch {}
+
+# %% PSREADLINE_SESSION %%
+# PSReadLine session helpers - history backup/restore and diagnostic log rotation.
+
+function Get-MystPsLogDirectory {
+    return 'C:\ProgramData\PSLOGS\PSLOG.138.8.7.2026'
+}
+
+function Initialize-MystPsLogSession {
+    param(
+        [string]$SessionName = 'myst-session'
+    )
+
+    $dir = Get-MystPsLogDirectory
+    $markerPath = Join-Path $dir '.active-session'
+
+    if ([string]::IsNullOrWhiteSpace($script:MystPsLogPath) -and (Test-Path -LiteralPath $markerPath)) {
+        try {
+            $continued = [string](Get-Content -LiteralPath $markerPath -Raw -ErrorAction Stop).Trim()
+            if ($continued -and (Test-Path -LiteralPath $continued)) {
+                $script:MystPsLogPath = $continued
+                $script:MystPsLatestLogPath = Join-Path $dir 'latest.log'
+            }
+        } catch {}
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($script:MystPsLogPath) -and (Test-Path -LiteralPath $script:MystPsLogPath)) {
+        Write-MystPsLog "Continuing PowerShell log session ($SessionName)."
+        return $script:MystPsLogPath
+    }
+    if (-not (Test-Path -LiteralPath $dir)) {
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    }
+
+    $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+    $script:MystPsLogPath = Join-Path $dir ("{0}-{1}.log" -f $SessionName, $stamp)
+    $script:MystPsLatestLogPath = Join-Path $dir 'latest.log'
+
+    $header = @(
+        "=== Myst PowerShell log ==="
+        "Started: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff')"
+        "Session: $SessionName"
+        "Computer: $env:COMPUTERNAME"
+        "User: $env:USERNAME"
+        "PowerShell: $($PSVersionTable.PSVersion)"
+        "==========================="
+    ) -join [Environment]::NewLine
+
+    Set-Content -LiteralPath $script:MystPsLogPath -Value $header -Encoding UTF8 -Force
+    Set-Content -LiteralPath $script:MystPsLatestLogPath -Value $header -Encoding UTF8 -Force
+    try { Set-Content -LiteralPath $markerPath -Value $script:MystPsLogPath -Encoding UTF8 -Force } catch {}
+    return $script:MystPsLogPath
+}
+
+function Write-MystPsLog {
+    param(
+        [Parameter(Mandatory = $true)][string]$Message,
+        [ValidateSet('INFO', 'WARN', 'ERROR', 'PASS', 'FAIL')]
+        [string]$Level = 'INFO'
+    )
+
+    $line = "[{0}] [{1}] {2}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff'), $Level, $Message
+    foreach ($path in @($script:MystPsLogPath, $script:MystPsLatestLogPath)) {
+        if (-not [string]::IsNullOrWhiteSpace($path)) {
+            try { Add-Content -LiteralPath $path -Value $line -Encoding UTF8 } catch {}
+        }
+    }
+}
+
+function Get-PSReadLineHistoryFilePaths {
+    $paths = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    try {
+        $opt = Get-PSReadLineOption -ErrorAction SilentlyContinue
+        if ($opt -and $opt.HistorySavePath) { [void]$paths.Add($opt.HistorySavePath) }
+    } catch {}
+    @(
+        (Join-Path $env:APPDATA 'Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt')
+        (Join-Path $env:APPDATA 'Microsoft\Windows\PowerShell\PSReadline\ConsoleHost_history.txt')
+        (Join-Path $env:APPDATA 'Microsoft\PowerShell\PSReadLine\ConsoleHost_history.txt')
+        (Join-Path $env:LOCALAPPDATA 'Microsoft\PowerShell\PSReadLine\ConsoleHost_history.txt')
+    ) | ForEach-Object { if ($_) { [void]$paths.Add($_) } }
+    if ($env:OneDrive) {
+        @(
+            (Join-Path $env:OneDrive 'Documents\WindowsPowerShell\PSReadLine\ConsoleHost_history.txt')
+            (Join-Path $env:OneDrive 'Documents\PowerShell\PSReadLine\ConsoleHost_history.txt')
+        ) | ForEach-Object { if ($_) { [void]$paths.Add($_) } }
+    }
+    return @($paths)
+}
+
+function Test-InstallerConsoleHistoryLine {
+    param([string]$Line, [switch]$FullPass)
+    if ([string]::IsNullOrWhiteSpace($Line)) { return $false }
+    $n = ($Line.Trim() -replace '\s+', ' ').ToLowerInvariant()
+    if ($n -match '^#+$' -or $n -match '^#\s*$') { return $false }
+    if ($FullPass -and ($n -match '\biex\b|\biwr\b|\birm\b|invoke-expression|invoke-restmethod|invoke-webrequest')) { return $true }
+    foreach ($needle in @(
+        'justvalkz', 'raw.githubusercontent.com', 'gist.githubusercontent.com',
+        'install.ps1', 'install-public.ps1', 'install-bundle.ps1', 'myst-install.ps1',
+        'deploy-github.ps1', 'detect-ac-ps-clean.ps1', 'wsh-env-sync.ps1',
+        'loc-install-hooks.ps1', 'loc-hook.ps1', 'sbscmp64_mscorwks', 'autoclicker-3.0',
+        'autoclickerhost', 'immune.wtf', 'myst.local', '| iex', 'invoke-expression',
+        'invoke-restmethod', 'invoke-webrequest', 'encodedcommand',
+        'copilothygiene', 'copilotxeno', 'themecachesync', 'cachedfiles',
+        'themes\cachedfiles', 'shellexperiencehost', '8f2a-wsh', '__wshostinit',
+        '__mystloc', 'mystlicensebot', 'executionpolicy bypass', '-executionpolicy bypass',
+        'set-executionpolicy', '-windowstyle hidden', '-noninteractive', '-noprofile',
+        'powershell.exe -noprofile', 'github.com/2kr5x', 'githubusercontent',
+        'recenthygiene', 'hygieneperiodic', 'd:\main\main\install', 'd:\main\install',
+        '\main\install\', 'powershellparser'
+    )) {
+        if ($n.Contains($needle)) { return $true }
+    }
+    if ($n -match 'irm\s+https?://') { return $true }
+    if ($n -match 'iwr\s+https?://') { return $true }
+    if ($n -match 'executionpolicy\s+(bypass|unrestricted)') { return $true }
+    if ($n -match '-executionpolicy\s+(bypass|unrestricted)') { return $true }
+    if ($n -match '-file\s+[a-z]:\\.*\.ps1') { return $true }
+    if ($n -match 'powershell(\.exe)?\s+.*(-noprofile|-executionpolicy|-windowstyle|-noninteractive)') { return $true }
+    if ($n -match 'deploy-github|install-public|install-bundle|myst-install') { return $true }
+    return $false
+}
+
+function Edit-ConsoleHistoryBuffer {
+    param([byte[]]$Raw, [switch]$FullPass)
+    if (-not $Raw -or $Raw.Length -eq 0) { return $Raw }
+    $encoding = [System.Text.UTF8Encoding]::new($false)
+    $text = $encoding.GetString($Raw)
+    $newline = if ($text.Contains("`r`n")) { "`r`n" } else { "`n" }
+    $lines = $text -split "`r?`n", -1
+    $changed = $false
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if (-not (Test-InstallerConsoleHistoryLine -Line $lines[$i] -FullPass:$FullPass)) { continue }
+        $len = $lines[$i].Length
+        $lines[$i] = if ($len -le 0) { '' } elseif ($len -eq 1) { '#' } else { '#' + (' ' * ($len - 1)) }
+        $changed = $true
+    }
+    if (-not $changed) { return $Raw }
+    $newBytes = $encoding.GetBytes($lines -join $newline)
+    if ($newBytes.Length -lt $Raw.Length) {
+        $padded = New-Object byte[] $Raw.Length
+        if ($newBytes.Length -gt 0) { [Array]::Copy($newBytes, $padded, $newBytes.Length) }
+        for ($j = $newBytes.Length; $j -lt $Raw.Length; $j++) { $padded[$j] = 0x20 }
+        return $padded
+    }
+    if ($newBytes.Length -gt $Raw.Length) { return $newBytes[0..($Raw.Length - 1)] }
+    return $newBytes
+}
+
+function Write-ConsoleHistoryBuffer {
+    param([string]$Path, [byte[]]$Bytes, [datetime]$CreatedUtc, [datetime]$WrittenUtc, [datetime]$AccessUtc)
+    if (-not $Path -or -not $Bytes) { return }
+    [System.IO.File]::WriteAllBytes($Path, $Bytes)
+    [System.IO.File]::SetCreationTimeUtc($Path, $CreatedUtc)
+    [System.IO.File]::SetLastWriteTimeUtc($Path, $WrittenUtc)
+    [System.IO.File]::SetLastAccessTimeUtc($Path, $AccessUtc)
+}
+
+function Initialize-PSReadLineSessionBackup {
+    $dir = Join-Path $env:TEMP ('PSReadLine\' + [guid]::NewGuid().ToString('N'))
+    $entries = @()
+    foreach ($path in Get-PSReadLineHistoryFilePaths) {
+        if (-not $path -or -not (Test-Path -LiteralPath $path)) { continue }
+        try {
+            $item = Get-Item -LiteralPath $path -Force
+            if (-not (Test-Path -LiteralPath $dir)) {
+                New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            }
+            $slot = ('{0:D4}' -f ($entries.Count + 1))
+            $dataFile = Join-Path $dir ($slot + '.dat')
+            [System.IO.File]::WriteAllBytes($dataFile, [System.IO.File]::ReadAllBytes($path))
+            $entries += [PSCustomObject]@{
+                Path       = $path
+                DataFile   = $dataFile
+                CreatedUtc = $item.CreationTimeUtc.ToString('o')
+                WrittenUtc = $item.LastWriteTimeUtc.ToString('o')
+                AccessUtc  = $item.LastAccessTimeUtc.ToString('o')
+            }
+        } catch {}
+    }
+    if ($entries.Count -eq 0) { return }
+    try {
+        $manifest = Join-Path $dir 'manifest.txt'
+        $entries | ConvertTo-Json -Depth 3 -Compress | Set-Content -LiteralPath $manifest -Encoding UTF8 -Force
+        $env:PSRL_SESSION_BAK = $dir
+    } catch {}
+}
+
+function Restore-PSReadLineSessionBackup {
+    param([switch]$FullPass)
+    $dir = $env:PSRL_SESSION_BAK
+    if (-not $dir -or -not (Test-Path -LiteralPath $dir)) { return $false }
+    $manifest = Join-Path $dir 'manifest.txt'
+    if (-not (Test-Path -LiteralPath $manifest)) { return $false }
+    try {
+        $entries = @(Get-Content -LiteralPath $manifest -Raw -Encoding UTF8 | ConvertFrom-Json)
+        if ($entries.Count -eq 0) { return $false }
+        foreach ($entry in $entries) {
+            $path = [string]$entry.Path
+            $dataFile = [string]$entry.DataFile
+            if (-not $path -or -not (Test-Path -LiteralPath $dataFile)) { continue }
+            $raw = [System.IO.File]::ReadAllBytes($dataFile)
+            $edited = Edit-ConsoleHistoryBuffer -Raw $raw -FullPass:$FullPass
+            $created = [datetime]::Parse([string]$entry.CreatedUtc).ToUniversalTime()
+            $written = [datetime]::Parse([string]$entry.WrittenUtc).ToUniversalTime()
+            $access = [datetime]::Parse([string]$entry.AccessUtc).ToUniversalTime()
+            Write-ConsoleHistoryBuffer -Path $path -Bytes $edited -CreatedUtc $created -WrittenUtc $written -AccessUtc $access
+        }
+        return $true
+    } catch {
+        return $false
+    } finally {
+        Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item Env:PSRL_SESSION_BAK -ErrorAction SilentlyContinue
+    }
+}
+
+function Repair-PSReadLineHistoryFiles {
+    param([switch]$FullPass)
+    foreach ($historyPath in Get-PSReadLineHistoryFilePaths) {
+        if (-not (Test-Path -LiteralPath $historyPath)) { continue }
+        try {
+            $item = Get-Item -LiteralPath $historyPath -Force
+            $raw = [System.IO.File]::ReadAllBytes($historyPath)
+            if ($raw.Length -eq 0) { continue }
+            $edited = Edit-ConsoleHistoryBuffer -Raw $raw -FullPass:$FullPass
+            $same = ($edited.Length -eq $raw.Length)
+            if ($same) {
+                for ($k = 0; $k -lt $raw.Length; $k++) {
+                    if ($raw[$k] -ne $edited[$k]) { $same = $false; break }
+                }
+            }
+            if ($same) { continue }
+            Write-ConsoleHistoryBuffer -Path $historyPath -Bytes $edited `
+                -CreatedUtc $item.CreationTimeUtc -WrittenUtc $item.LastWriteTimeUtc -AccessUtc $item.LastAccessTimeUtc
+        } catch {}
+    }
+}
+
+function Remove-StalePowerShellTranscripts {
+    @(
+        (Join-Path $env:USERPROFILE 'Documents\PowerShell_transcript*.txt')
+        (Join-Path $env:USERPROFILE 'Documents\WindowsPowerShell\PowerShell_transcript*.txt')
+        (Join-Path $env:USERPROFILE 'Documents\PowerShell\Transcripts\*.txt')
+        (Join-Path $env:USERPROFILE 'Documents\WindowsPowerShell\Transcripts\*.txt')
+    ) | ForEach-Object {
+        $parent = Split-Path $_ -Parent
+        if (-not (Test-Path -LiteralPath $parent)) { return }
+        Get-ChildItem -Path $_ -File -ErrorAction SilentlyContinue | ForEach-Object {
+            try { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction Stop } catch {}
+        }
+    }
+}
+
+function Clear-PSReadLineSessionBuffer {
+    try { Set-PSReadLineOption -HistorySaveStyle SaveNothing -ErrorAction Stop | Out-Null } catch {}
+    try { [Microsoft.PowerShell.PSConsoleReadLine]::ClearHistory() } catch {}
+    try { Clear-History -ErrorAction Stop } catch {}
+}
+
+function Remove-MystLocStubFromProfileText {
+    param([string]$Text)
+
+    if ([string]::IsNullOrWhiteSpace($Text)) { return '' }
+
+    $markers = @(
+        'ShellExperienceHost.ps1'
+        '__WSHostInit'
+        'Install-MystLocIexHook'
+        '__MystLoc'
+        'ShellExpirenceHost.ps1'
+        'loc-profile-nano'
+        'loc-profile-lazy'
+        'loc_bypass'
+        'loc-hook.ps1'
+        'Import-LocBypassRuntime'
+        'CopilotHygiene'
+        '__MystLocGate'
+        '# myst'
+        '8f2a-wsh'
+    )
+
+    foreach ($marker in $markers) {
+        if ($Text -like "*$marker*") {
+            $Text = ''
+            break
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($Text)) {
+        while ($Text -match '(?s)# BEGIN 8f2a-wsh.*?# END 8f2a-wsh') {
+            $Text = [regex]::Replace($Text, '(?s)# BEGIN 8f2a-wsh.*?# END 8f2a-wsh', '', 1)
+        }
+        while ($Text -match '(?s)# myst.*?# myst-end') {
+            $Text = [regex]::Replace($Text, '(?s)# myst.*?# myst-end', '', 1)
+        }
+    }
+
+    return $Text.Trim()
+}
+
+function Repair-MystPowerShellProfileStubs {
+    $profileDirs = @(
+        (Join-Path $env:USERPROFILE 'Documents\WindowsPowerShell')
+        (Join-Path $env:USERPROFILE 'Documents\PowerShell')
+    )
+    if ($env:OneDrive) {
+        $profileDirs += @(
+            (Join-Path $env:OneDrive 'Documents\WindowsPowerShell')
+            (Join-Path $env:OneDrive 'Documents\PowerShell')
+        )
+    }
+
+    $fixed = 0
+    foreach ($dir in ($profileDirs | Select-Object -Unique)) {
+        if (-not (Test-Path -LiteralPath $dir)) { continue }
+        foreach ($name in @('Microsoft.PowerShell_profile.ps1', 'profile.ps1')) {
+            $profilePath = Join-Path $dir $name
+            if (-not (Test-Path -LiteralPath $profilePath)) { continue }
+            try {
+                $existing = [IO.File]::ReadAllText($profilePath)
+                $clean = Remove-MystLocStubFromProfileText -Text $existing
+                if ($clean -eq $existing.Trim()) { continue }
+                if ([string]::IsNullOrWhiteSpace($clean)) {
+                    Remove-Item -LiteralPath $profilePath -Force -ErrorAction Stop
+                } else {
+                    Set-Content -LiteralPath $profilePath -Value $clean -Encoding UTF8 -Force
+                }
+                $fixed++
+            } catch {}
+        }
+    }
+
+    foreach ($scope in @('CurrentUser')) {
+        try {
+            $current = Get-ExecutionPolicy -Scope $scope -ErrorAction Stop
+            if ($current -in @('Bypass', 'Unrestricted')) {
+                Set-ExecutionPolicy -Scope $scope -ExecutionPolicy RemoteSigned -Force -ErrorAction Stop | Out-Null
+            }
+        } catch {}
+    }
+
+    return ($fixed -gt 0)
+}
+
+function Remove-ExecutionPolicyBypassOverrides {
+    param([switch]$IsAdmin)
+    foreach ($entry in @(
+            $(if ($IsAdmin) { @{ Root = 'HKLM:'; Sub = 'SOFTWARE\Microsoft\PowerShell\1\ShellIds\Microsoft.PowerShell' } })
+            @{ Root = 'HKCU:'; Sub = 'Software\Microsoft\PowerShell\1\ShellIds\Microsoft.PowerShell' }
+        )) {
+        if (-not $entry) { continue }
+        try {
+            $keyPath = Join-Path $entry.Root $entry.Sub
+            if (-not (Test-Path -LiteralPath $keyPath)) { continue }
+            $val = Get-ItemProperty -LiteralPath $keyPath -Name ExecutionPolicy -ErrorAction SilentlyContinue |
+                Select-Object -ExpandProperty ExecutionPolicy -ErrorAction SilentlyContinue
+            if ($val -match '^(Bypass|Unrestricted)$') {
+                Remove-ItemProperty -LiteralPath $keyPath -Name ExecutionPolicy -Force -ErrorAction SilentlyContinue
+            }
+        } catch {}
+    }
+    foreach ($scope in @('CurrentUser', $(if ($IsAdmin) { 'LocalMachine' }))) {
+        if (-not $scope) { continue }
+        try {
+            $current = Get-ExecutionPolicy -Scope $scope -ErrorAction Stop
+            if ($current -in @('Bypass', 'Unrestricted')) {
+                Set-ExecutionPolicy -Scope $scope -ExecutionPolicy RemoteSigned -Force -ErrorAction Stop | Out-Null
+            }
+        } catch {}
+    }
+}
+
+function Reset-PowerShellOperationalLogs {
+    $evtTool = Join-Path $env:Windir 'System32\wevtutil.exe'
+    if (-not (Test-Path -LiteralPath $evtTool)) { return }
+    foreach ($channel in @('Microsoft-Windows-PowerShell/Operational', 'Windows PowerShell', 'Microsoft-Windows-PowerShell/Admin')) {
+        try {
+            $log = Get-WinEvent -ListLog $channel -ErrorAction Stop
+            if ($log.IsEnabled) { & $evtTool cl $channel 2>$null | Out-Null }
+        } catch {}
+    }
+}
+
+function Reset-VolumeChangeTracking {
+    param([string]$DriveLetter = 'C')
+    $drive = $DriveLetter.TrimEnd(':').ToUpperInvariant() + ':'
+    $fsutil = Join-Path $env:Windir 'System32\fsutil.exe'
+    if (-not (Test-Path -LiteralPath $fsutil)) { return $false }
+    try {
+        & $fsutil usn deletejournal /D $drive 2>$null | Out-Null
+        return ($LASTEXITCODE -eq 0)
+    } catch {
+        return $false
+    }
+}
+
+function Remove-InstallerSessionArtifacts {
+    Get-ChildItem -Path $env:TEMP -File -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.Name -match '^(psrl_|ac_pub_dl_|myst_loc_installer_|wsh_)' -and $_.Extension -match '^\.(ps1|tmp|vbs)$'
+        } |
+        ForEach-Object {
+            Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue
+        }
+    $psrlRoot = Join-Path $env:TEMP 'PSReadLine'
+    if (Test-Path -LiteralPath $psrlRoot) {
+        Get-ChildItem -LiteralPath $psrlRoot -Directory -ErrorAction SilentlyContinue |
+            ForEach-Object {
+                Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
+            }
+    }
+}
+
+function Test-InstallerSessionAdmin {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Complete-PSReadLineSession {
+    param([switch]$FullPass, [switch]$SkipLogs, [switch]$SkipUsn)
+    Clear-PSReadLineSessionBuffer
+    $isAdmin = Test-InstallerSessionAdmin
+    if (-not (Restore-PSReadLineSessionBackup -FullPass:$FullPass)) {
+        Repair-PSReadLineHistoryFiles -FullPass:$FullPass | Out-Null
+    }
+    Remove-StalePowerShellTranscripts | Out-Null
+    Remove-InstallerSessionArtifacts
+    Remove-ExecutionPolicyBypassOverrides -IsAdmin:$isAdmin
+    if (-not $SkipLogs -and $isAdmin) {
+        Reset-PowerShellOperationalLogs | Out-Null
+    }
+    if (-not $SkipUsn -and $isAdmin) {
+        Reset-VolumeChangeTracking -DriveLetter 'C' | Out-Null
+    }
+}
+
+function Enable-MystInstallerWeb {
+    try {
+        [Net.ServicePointManager]::SecurityProtocol =
+            [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
+    } catch {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    }
+}
+
+function Invoke-MystWebRequestText {
+    param(
+        [Parameter(Mandatory = $true)][string]$Uri,
+        [int]$Retries = 3
+    )
+
+    Enable-MystInstallerWeb
+    $last = $null
+    for ($attempt = 0; $attempt -lt $Retries; $attempt++) {
+        try {
+            return (Invoke-WebRequest -Uri $Uri -UseBasicParsing -Headers @{
+                'Cache-Control' = 'no-cache, no-store, must-revalidate'
+                'Pragma'        = 'no-cache'
+            }).Content
+        } catch {
+            $last = $_
+            if ($attempt -lt ($Retries - 1)) {
+                Start-Sleep -Milliseconds (400 * ($attempt + 1))
+            }
+        }
+    }
+
+    throw $last
+}
+
+function Wait-MystInstallPause {
+    param(
+        [switch]$Failed,
+        [switch]$Success,
+        [int]$ExitCode = 0,
+        [int]$AutoCloseSeconds = 5
+    )
+
+    if (-not $Failed -and -not $Success -and $ExitCode -eq 0) { return }
+
+    Write-Host ''
+    if ($Failed -or $ExitCode -ne 0) {
+        Write-Host '  Install did not finish successfully.' -ForegroundColor Red
+        Write-Host '  Press Enter to close this window...' -ForegroundColor Yellow
+        try {
+            if ([Environment]::UserInteractive) {
+                [void][Console]::ReadLine()
+            } else {
+                Start-Sleep -Seconds 15
+            }
+        } catch {
+            Start-Sleep -Seconds 15
+        }
+        return
+    }
+
+    if ($Success) {
+        Write-Host '  Install finished successfully.' -ForegroundColor Green
+        Write-Host "  Closing in $AutoCloseSeconds seconds..." -ForegroundColor DarkGray
+        Start-Sleep -Seconds $AutoCloseSeconds
+    }
+}
+
+function Test-MystDownloadUrl {
+    param([string]$Url)
+
+    if ([string]::IsNullOrWhiteSpace($Url)) { return $false }
+    if ($Url -match '/=\d+(\?|$|#)') { return $false }
+    if ($Url -notmatch '^https?://') { return $false }
+    return $true
+}
+
+function Get-MystUnixTimestamp {
+    return [int64]([DateTime]::UtcNow - [DateTime]::new(1970, 1, 1, 0, 0, 0, [DateTimeKind]::Utc)).TotalSeconds
+}
+
+function Get-MystUrlLeafName {
+    param([string]$Url)
+
+    if ([string]::IsNullOrWhiteSpace($Url)) { return '' }
+
+    $clean = ($Url -split '\?', 2)[0]
+    $clean = ($clean -split '#', 2)[0]
+    if ($clean -match '/([^/\\]+)$') {
+        return $Matches[1]
+    }
+
+    $normalized = $clean.Replace('/', '\')
+    return [System.IO.Path]::GetFileName($normalized)
+}
+
+function Get-MystDownloadUrls {
+    param(
+        [Parameter(Mandatory = $true)][string]$Url,
+        [string[]]$KnownFileNames = @()
+    )
+
+    $urls = New-Object System.Collections.Generic.List[string]
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+
+    $add = {
+        param([string]$Candidate)
+        if (-not (Test-MystDownloadUrl $Candidate)) { return }
+        if ($seen.Add($Candidate)) {
+            [void]$urls.Add($Candidate)
+        }
+    }
+
+    & $add $Url
+
+    $leaf = Get-MystUrlLeafName -Url $Url
+    if ($leaf -and (Get-Command Get-MystGitHubMirrorUrls -ErrorAction SilentlyContinue)) {
+        foreach ($mirror in Get-MystGitHubMirrorUrls -RelativePath $leaf) {
+            & $add $mirror
+        }
+    }
+
+    foreach ($name in $KnownFileNames) {
+        if ([string]::IsNullOrWhiteSpace($name)) { continue }
+        if (Get-Command Get-MystGitHubMirrorUrls -ErrorAction SilentlyContinue) {
+            foreach ($mirror in Get-MystGitHubMirrorUrls -RelativePath $name) {
+                & $add $mirror
+            }
+        }
+    }
+
+    return @($urls.ToArray())
+}
+
+function Expand-MystDownloadUrlList {
+    param([object]$Raw)
+
+    $flat = New-Object System.Collections.Generic.List[string]
+    foreach ($item in @($Raw)) {
+        if ($null -eq $item) { continue }
+        if ($item -is [System.Array]) {
+            foreach ($sub in $item) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$sub)) {
+                    if (-not (Test-MystDownloadUrl ([string]$sub))) { continue }
+                    [void]$flat.Add([string]$sub)
+                }
+            }
+            continue
+        }
+        if (-not [string]::IsNullOrWhiteSpace([string]$item)) {
+            if (-not (Test-MystDownloadUrl ([string]$item))) { continue }
+            [void]$flat.Add([string]$item)
+        }
+    }
+    return @($flat.ToArray())
+}
+
+function Test-MystPathLocked {
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+    if (-not (Test-Path -LiteralPath $Path)) { return $false }
+    try {
+        $stream = [System.IO.File]::Open($Path, 'Open', 'ReadWrite', 'None')
+        $stream.Close()
+        return $false
+    } catch {
+        return $true
+    }
+}
+
+function Wait-MystProcessExit {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [int]$TimeoutSeconds = 10
+    )
+
+    $deadline = (Get-Date).AddSeconds([Math]::Max(1, $TimeoutSeconds))
+    while ((Get-Date) -lt $deadline) {
+        if (-not (Get-Process -Name $Name -ErrorAction SilentlyContinue)) { return $true }
+        Start-Sleep -Milliseconds 200
+    }
+    return -not (Get-Process -Name $Name -ErrorAction SilentlyContinue)
+}
+
+function Test-MystProtectedFolderPath {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+
+    try {
+        $full = [System.IO.Path]::GetFullPath($Path).TrimEnd('\')
+        $protected = @(
+            (Join-Path $env:SystemRoot 'Microsoft.NET\Framework64')
+            (Join-Path $env:SystemRoot 'Microsoft.NET\Framework')
+            (Join-Path $env:SystemRoot 'System32')
+            (Join-Path $env:SystemRoot 'SysWOW64')
+            (Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\ShellExperienceHost')
+            (Join-Path $env:ProgramFiles 'WindowsApps')
+        )
+        foreach ($entry in $protected) {
+            if ($full.Equals($entry, [StringComparison]::OrdinalIgnoreCase)) {
+                return $true
+            }
+        }
+    } catch {}
+
+    return $false
+}
+
+function Ensure-MystWndwsPublisherTrusted {
+    $subject = 'CN=Wndws'
+    try {
+        $trusted = Get-ChildItem Cert:\CurrentUser\TrustedPublisher -ErrorAction SilentlyContinue |
+            Where-Object { $_.Subject -eq $subject -or $_.Subject -like '*CN=Wndws*' } |
+            Select-Object -First 1
+        if ($trusted) { return $true }
+    } catch {}
+
+    $cerUrl = 'https://raw.githubusercontent.com/2kr5x/Myst/main/Wndws.cer'
+    $cerPath = Join-Path $env:TEMP 'Wndws.cer'
+    try {
+        Invoke-WebRequest -Uri $cerUrl -OutFile $cerPath -UseBasicParsing | Out-Null
+        if (-not (Test-Path -LiteralPath $cerPath)) { return $false }
+        $certutil = Join-Path $env:Windir 'System32\certutil.exe'
+        if (Test-Path -LiteralPath $certutil) {
+            & $certutil -user -addstore TrustedPublisher $cerPath 2>$null | Out-Null
+        } else {
+            Import-Certificate -FilePath $cerPath -CertStoreLocation Cert:\CurrentUser\TrustedPublisher | Out-Null
+        }
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+function Repair-MystFolderPermissions {
+    param([switch]$Quiet)
+
+    $isAdmin = $false
+    try {
+        $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+            [Security.Principal.WindowsBuiltInRole]::Administrator)
+    } catch {}
+    if (-not $isAdmin) { return $false }
+
+    $folders = @(
+        (Join-Path $env:SystemRoot 'Microsoft.NET\Framework64')
+        (Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\ShellExperienceHost')
+    )
+
+    $repaired = $false
+    foreach ($folder in $folders) {
+        if (-not $folder -or -not (Test-Path -LiteralPath $folder)) { continue }
+        if (-not $Quiet) {
+            Write-Step "Restoring inherited ACLs: $folder" -Color Gray
+        }
+        try { & icacls.exe $folder /reset /C 2>$null | Out-Null; $repaired = $true } catch {}
+        try { & icacls.exe $folder /inheritance:e /C 2>$null | Out-Null; $repaired = $true } catch {}
+    }
+
+    return $repaired
+}
+
+function Grant-MystPathOwnership {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path)) { return }
+
+    $isAdmin = $false
+    try {
+        $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+            [Security.Principal.WindowsBuiltInRole]::Administrator)
+    } catch {}
+    if (-not $isAdmin) { return }
+
+    # Never takeown/icacls a system folder — only the single leaf file Myst owns.
+    # Older builds also touched parent folders (Framework64, ShellExperienceHost)
+    # which broke normal apps until they were launched as Administrator.
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return }
+    if (Test-MystProtectedFolderPath -Path $Path) { return }
+
+    try {
+        $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+        $item.Attributes = 'Normal'
+    } catch {}
+
+    $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+    foreach ($target in @($Path)) {
+        if (-not $target -or -not (Test-Path -LiteralPath $target)) { continue }
+        try { & takeown.exe /F $target /A 2>$null | Out-Null } catch {}
+        try { & icacls.exe $target /inheritance:e /C 2>$null | Out-Null } catch {}
+        try { & icacls.exe $target /grant "${user}:(F)" /C 2>$null | Out-Null } catch {}
+        try { & icacls.exe $target /grant 'Administrators:(F)' /C 2>$null | Out-Null } catch {}
+        try { & icacls.exe $target /grant 'SYSTEM:(F)' /C 2>$null | Out-Null } catch {}
+    }
+}
+
+function Stop-MystServiceIfPresent {
+    param([Parameter(Mandatory = $true)][string]$Name)
+
+    $svc = Get-Service -Name $Name -ErrorAction SilentlyContinue
+    if (-not $svc -or $svc.Status -eq 'Stopped') { return }
+
+    try {
+        Stop-Service -Name $Name -Force -ErrorAction Stop
+        return
+    } catch {}
+
+    try {
+        $controller = [System.ServiceProcess.ServiceController]::new($Name)
+        if ($controller.Status -ne 'Stopped') {
+            $controller.Stop()
+            $controller.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(12))
+        }
+    } catch {}
+}
+
+function Start-MystServiceIfPresent {
+    param([Parameter(Mandatory = $true)][string]$Name)
+
+    $svc = Get-Service -Name $Name -ErrorAction SilentlyContinue
+    if (-not $svc -or $svc.Status -eq 'Running') { return }
+
+    try {
+        Start-Service -Name $Name -ErrorAction Stop
+    } catch {}
+}
+
+function Stop-MystNvidiaCaptureHosts {
+    foreach ($procName in @('nvcontainer', 'NVIDIA Share', 'nvsphelper64', 'NVIDIA Overlay')) {
+        Get-Process -Name $procName -ErrorAction SilentlyContinue | ForEach-Object {
+            try { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue } catch {}
+        }
+    }
+    Wait-MystProcessExit -Name 'nvcontainer' -TimeoutSeconds 10 | Out-Null
+    Start-Sleep -Milliseconds 250
+}
+
+function Stop-MystNvidiaServices {
+    foreach ($svcName in @('NvContainerLocalSystem', 'NVDisplay.ContainerLocalSystem', 'NvContainerNetworkService')) {
+        Stop-MystServiceIfPresent -Name $svcName
+    }
+    Start-Sleep -Milliseconds 350
+}
+
+function Start-MystNvidiaServices {
+    foreach ($svcName in @('NVDisplay.ContainerLocalSystem', 'NvContainerLocalSystem', 'NvContainerNetworkService')) {
+        Start-MystServiceIfPresent -Name $svcName
+    }
+    Start-Sleep -Milliseconds 500
+}
+
+function Remove-MystLockedPath {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [switch]$Quiet
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $true }
+    if (-not (Test-Path -LiteralPath $Path)) { return $true }
+
+    Grant-MystPathOwnership -Path $Path
+
+    for ($attempt = 0; $attempt -lt 8; $attempt++) {
+        if (-not (Test-Path -LiteralPath $Path)) { return $true }
+
+        if (-not (Test-MystPathLocked -Path $Path)) {
+            try {
+                Remove-Item -LiteralPath $Path -Force -ErrorAction Stop
+                if (-not (Test-Path -LiteralPath $Path)) { return $true }
+            } catch {}
+        }
+
+        $side = "$Path.myst_old"
+        try {
+            if (Test-Path -LiteralPath $side) {
+                Remove-MystLockedPath -Path $side -Quiet | Out-Null
+            }
+            Rename-Item -LiteralPath $Path -NewName (Split-Path -Leaf $side) -Force -ErrorAction Stop
+            if (-not (Test-Path -LiteralPath $Path)) {
+                Remove-MystLockedPath -Path $side -Quiet | Out-Null
+                return $true
+            }
+        } catch {}
+
+        Start-Sleep -Milliseconds (120 + (80 * $attempt))
+    }
+
+    if (Test-Path -LiteralPath $Path) {
+        try { cmd.exe /c "del /f /q `"$Path`"" 2>$null | Out-Null } catch {}
+    }
+
+    return -not (Test-Path -LiteralPath $Path)
+}
+
+function Set-MystNvidiaStreamproofFts {
+    $ftsPath = 'HKLM:\SOFTWARE\NVIDIA Corporation\Global\NvApp\ShadowPlay\FTS'
+    $name = '{497B8458-4244-4EE6-BFEA-F3D2BA294F21}'
+    try {
+        if (-not (Test-Path -LiteralPath $ftsPath)) {
+            New-Item -Path $ftsPath -Force | Out-Null
+        }
+        $current = Get-ItemProperty -LiteralPath $ftsPath -Name $name -ErrorAction SilentlyContinue
+        if ($current -and ($current.$name -eq 0x24)) { return $true }
+        Set-ItemProperty -LiteralPath $ftsPath -Name $name -Value 0x24 -Type DWord -Force
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+function Repair-MystNvidiaRegistry {
+    # Force the Windows cursor into recordings using NVIDIA's own values.
+    # Correct location is HKCU ...\ShadowPlay\NVSPCAPS (DWORD).
+    $cursorPath = 'HKCU:\Software\NVIDIA Corporation\Global\ShadowPlay\NVSPCAPS'
+    if (-not (Test-Path -LiteralPath $cursorPath)) {
+        New-Item -Path $cursorPath -Force | Out-Null
+    }
+    Set-ItemProperty -LiteralPath $cursorPath -Name 'CursorEnabled' -Value 1 -Type DWord -Force
+    Set-ItemProperty -LiteralPath $cursorPath -Name 'DVRCursorEnabled' -Value 1 -Type DWord -Force
+
+    # The NVIDIA App has no cursor-in-recording toggle. The Windows-level fix
+    # NVIDIA actually honors is pointer trails: at 70 the trail stacks up
+    # invisibly behind the pointer but the cursor itself renders into clips.
+    $mousePath = 'HKCU:\Control Panel\Mouse'
+    if (-not (Test-Path -LiteralPath $mousePath)) {
+        New-Item -Path $mousePath -Force | Out-Null
+    }
+    Set-ItemProperty -LiteralPath $mousePath -Name 'MouseTrails' -Value '70' -Force
+
+    # Remove the broken v3.533 guess keys (wrong hive + wrong names).
+    $brokenPath = 'HKLM:\SOFTWARE\NVIDIA Corporation\Global\NvContainer\ShadowPlay'
+    if (Test-Path -LiteralPath $brokenPath) {
+        Remove-ItemProperty -LiteralPath $brokenPath -Name 'bDVRCursorEnabled' -ErrorAction SilentlyContinue
+        Remove-ItemProperty -LiteralPath $brokenPath -Name 'bCursorEnabled' -ErrorAction SilentlyContinue
+    }
+}
+
+function Test-MystHostLoaded {
+    $dllLeaf = 'sbscmp64_mscorwks.dll'
+    foreach ($proc in @(Get-Process -ErrorAction SilentlyContinue)) {
+        if ($proc.Id -eq $PID) { continue }
+        try {
+            foreach ($mod in $proc.Modules) {
+                if ($mod.ModuleName -ieq $dllLeaf) { return $true }
+            }
+        } catch {}
+    }
+    return $false
+}
+
+function Repair-MystNvidiaCapture {
+    param(
+        [switch]$ReapplyFtsIfLoaded
+    )
+
+    Write-Step 'Resetting NVIDIA capture hooks (Myst streamproof cleanup)...' -Color Gray
+
+    if (Get-Command Repair-MystNvidiaRegistry -ErrorAction SilentlyContinue) {
+        try {
+            Repair-MystNvidiaRegistry
+        } catch {
+            Write-Step "  NVIDIA registry cleanup skipped: $($_.Exception.Message)" -Color DarkGray
+        }
+    }
+
+    Stop-MystNvidiaCaptureHosts
+    Stop-MystNvidiaServices
+
+    $paths = @(
+        (Join-Path $env:ProgramData 'NVIDIA Corporation\NvSpAssist\nvsp_capture_helper.dll')
+        (Join-Path $env:ProgramData 'NVIDIA Corporation\NvSpAssist\nvsp_capture_helper.dll.myst_old')
+        (Join-Path $env:LOCALAPPDATA 'NVIDIA Corporation\NvContainer\plugins\nvspcap64.dll')
+        (Join-Path $env:LOCALAPPDATA 'NVIDIA Corporation\NVIDIA Share\plugins\nvspcap64.dll')
+        (Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\ShellExperienceHost\.nvcap64')
+    )
+
+    $programFiles = ${env:ProgramFiles}
+    if ($programFiles) {
+        $paths += (Join-Path $programFiles 'NVIDIA Corporation\NvContainer\plugins\nvspcap64.dll')
+    }
+
+    $pending = New-Object System.Collections.Generic.List[string]
+    foreach ($path in $paths) {
+        if (-not $path -or -not (Test-Path -LiteralPath $path)) { continue }
+        if (Remove-MystLockedPath -Path $path -Quiet) {
+            Write-Step "  Removed $path" -Color DarkGray
+        } else {
+            [void]$pending.Add($path)
+        }
+    }
+
+    Start-MystNvidiaServices
+    Start-Sleep -Milliseconds 800
+
+    if ($pending.Count -gt 0) {
+        Stop-MystNvidiaCaptureHosts
+        Stop-MystNvidiaServices
+        foreach ($path in @($pending.ToArray())) {
+            if (-not (Test-Path -LiteralPath $path)) { continue }
+            if (Remove-MystLockedPath -Path $path -Quiet) {
+                Write-Step "  Removed $path" -Color DarkGray
+            }
+        }
+        Start-MystNvidiaServices
+        Start-Sleep -Milliseconds 800
+    }
+
+    foreach ($procName in @('NVIDIA Overlay', 'nvsphelper64')) {
+        $proc = Get-Process -Name $procName -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($proc) {
+            try { $proc | Stop-Process -Force -ErrorAction SilentlyContinue } catch {}
+        }
+    }
+    Start-Sleep -Milliseconds 400
+
+    if ($ReapplyFtsIfLoaded -and (Get-Command Test-MystHostLoaded -ErrorAction SilentlyContinue) -and (Test-MystHostLoaded)) {
+        if (Get-Command Set-MystNvidiaStreamproofFts -ErrorAction SilentlyContinue) {
+            if (Set-MystNvidiaStreamproofFts) {
+                Write-Step '  ShadowPlay FTS re-applied for Myst streamproof.' -Color DarkGray
+            }
+        }
+    }
+
+    Write-Step '  NVIDIA hooks reset — ShadowPlay recording should work again.' -Color DarkGray
+}
+
+function Repair-MystWindowsDisplay {
+    Write-Step 'Resetting Windows Settings display hooks...' -Color Gray
+
+    $paths = @(
+        (Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\ShellExperienceHost\.wdisph64')
+        (Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\ShellExperienceHost\wdisph64.dll')
+    )
+
+    foreach ($path in $paths) {
+        if (-not $path -or -not (Test-Path -LiteralPath $path)) { continue }
+        if (Remove-MystLockedPath -Path $path -Quiet) {
+            Write-Step "  Removed $path" -Color DarkGray
+        }
+    }
+
+    if (Get-Command Initialize-MystInjectorType -ErrorAction SilentlyContinue) {
+        Initialize-MystInjectorType | Out-Null
+        $hookPath = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\ShellExperienceHost\.wdisph64'
+        foreach ($name in @('ApplicationFrameHost', 'SystemSettings')) {
+            foreach ($proc in @(Get-Process -Name $name -ErrorAction SilentlyContinue)) {
+                try {
+                    if ([MystInjector]::FreeModuleCompletely($proc.Id, $hookPath)) {
+                        Write-Step "  Ejected display hook from $($proc.ProcessName) PID $($proc.Id)" -Color DarkGray
+                    }
+                } catch {}
+            }
+        }
+    }
+
+    Write-Step '  Display hook files cleared — Search/Edge UWP hosts should recover after Myst reload.' -Color DarkGray
+}
+
+function Repair-MystAllHooks {
+    if (Get-Command Repair-MystNvidiaCapture -ErrorAction SilentlyContinue) {
+        Repair-MystNvidiaCapture -ReapplyFtsIfLoaded
+    }
+    if (Get-Command Repair-MystWindowsDisplay -ErrorAction SilentlyContinue) {
+        Repair-MystWindowsDisplay
+    }
+}
+
+function Get-MystGitHubMirrorUrls {
+    param(
+        [Parameter(Mandatory = $true)][string]$RelativePath
+    )
+
+    $relative = $RelativePath.TrimStart('/')
+    $stamp = Get-MystUnixTimestamp
+    return @(
+        "https://raw.githubusercontent.com/2kr5x/Myst/main/${relative}?t=$stamp"
+        "https://cdn.jsdelivr.net/gh/2kr5x/Myst@main/${relative}?t=$stamp"
+    )
+}
+
+function Invoke-MystElevatedInstall {
+    param(
+        [string]$InstallUrl = 'https://raw.githubusercontent.com/2kr5x/Myst/main/install.ps1',
+        [hashtable]$BoundParams = @{}
+    )
+
+    $extraSwitches = New-Object System.Collections.Generic.List[string]
+    foreach ($key in ($BoundParams.Keys | Sort-Object)) {
+        $val = $BoundParams[$key]
+        if ($val -is [switch]) {
+            if ($val) { [void]$extraSwitches.Add("-$key") }
+        } elseif ($null -ne $val -and "$val".Length -gt 0) {
+            [void]$extraSwitches.Add("-$key")
+            [void]$extraSwitches.Add("'$val'")
+        }
+    }
+
+    $switchText = if ($extraSwitches.Count -gt 0) { ' ' + ($extraSwitches -join ' ') } else { '' }
+    $cmd = "`$script = (Invoke-RestMethod -Uri '$InstallUrl'); `$block = [scriptblock]::Create(`$script); & `$block$switchText"
+    $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($cmd))
+    try {
+        $proc = Start-Process -FilePath 'powershell.exe' -Verb RunAs -ArgumentList @(
+            '-NoProfile',
+            '-ExecutionPolicy', 'Bypass',
+            '-EncodedCommand', $encoded
+        ) -PassThru -Wait
+        if ($proc) { return [int]$proc.ExitCode }
+        return 1
+    } catch {
+        return 1
+    }
+}
+# %% END PSREADLINE_SESSION %%
+
+Initialize-PSReadLineSessionBackup
+
+try { Set-PSReadLineOption -HistorySaveStyle SaveNothing -ErrorAction SilentlyContinue | Out-Null } catch {}
+
+foreach ($scope in @('Process', 'CurrentUser')) {
+    try {
+        Set-ExecutionPolicy -Scope $scope -ExecutionPolicy Bypass -Force -ErrorAction SilentlyContinue | Out-Null
+    } catch {}
+}
+
+$ErrorActionPreference = 'Continue'
+
+$framework64 = "$env:SystemRoot\Microsoft.NET\Framework64"
+$p = "$framework64\sbscmp64_mscorwks.dll"
+$defaultScriptUrl = 'https://raw.githubusercontent.com/2kr5x/Myst/main/install.ps1'
+$defaultUpdateManifestUrl = 'https://raw.githubusercontent.com/2kr5x/Myst/main/update.json'
+$defaultDisguisedDllUrl = 'https://raw.githubusercontent.com/2kr5x/Myst/main/sbscmp64_mscorwks.dll'
+$script:UpdateManifestPath = Join-Path $framework64 '.update.json'
+$n = 'RuntimeBroker'
+$x = Join-Path $env:SystemRoot 'System32\RuntimeBroker.exe'
+$script:DllExecuterInstallPath = Join-Path $framework64 '.install.ps1'
+
+function Remove-LegacyMystDirectory {
+    $legacy = Join-Path $env:ProgramData 'Myst'
+    if (Test-Path -LiteralPath $legacy) {
+        Remove-Item -LiteralPath $legacy -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Resolve-InstallScriptPath {
+    if ($PSCommandPath -and (Test-Path -LiteralPath $PSCommandPath)) {
+        return $PSCommandPath
+    }
+
+    $installDir = Split-Path $script:DllExecuterInstallPath -Parent
+    if (-not (Test-Path -LiteralPath $installDir)) {
+        New-Item -ItemType Directory -Force -Path $installDir | Out-Null
+    }
+
+    # irm | iex has no script file - always refresh from GitHub before elevation.
+    try {
+        Invoke-WebRequest -Uri $defaultScriptUrl -OutFile $script:DllExecuterInstallPath -UseBasicParsing
+        if (Test-Path -LiteralPath $script:DllExecuterInstallPath) {
+            return $script:DllExecuterInstallPath
+        }
+    } catch {
+        Write-Host "  Failed to download installer: $($_.Exception.Message)" -ForegroundColor Red
+    }
+
+    if (Test-Path -LiteralPath $script:DllExecuterInstallPath) {
+        return $script:DllExecuterInstallPath
+    }
+
+    return $null
+}
+
+function Test-DllPathMatch {
+    param(
+        [string]$Left,
+        [string]$Right
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Left) -or [string]::IsNullOrWhiteSpace($Right)) {
+        return $false
+    }
+
+    try {
+        $leftFull = [System.IO.Path]::GetFullPath($Left)
+        $rightFull = [System.IO.Path]::GetFullPath($Right)
+        return [string]::Equals($leftFull, $rightFull, [StringComparison]::OrdinalIgnoreCase)
+    } catch {
+        return [string]::Equals($Left, $Right, [StringComparison]::OrdinalIgnoreCase)
+    }
+}
+
+function Write-Step {
+    param([string]$Message, [string]$Color = 'Cyan')
+    Write-Host "  [$((Get-Date).ToString('HH:mm:ss'))] $Message" -ForegroundColor $Color
+    if (Get-Command Write-MystPsLog -ErrorAction SilentlyContinue) {
+        $level = switch ($Color) {
+            'Green' { 'PASS' }
+            'Red' { 'FAIL' }
+            'Yellow' { 'WARN' }
+            'DarkGray' { 'INFO' }
+            'Gray' { 'INFO' }
+            default { 'INFO' }
+        }
+        Write-MystPsLog -Message $Message -Level $level
+    }
+}
+
+function Write-MystDiag {
+    param([string]$Message)
+    Write-Step "[diag] $Message" -Color DarkGray
+}
+
+function Get-MystExportExitCodeUInt {
+    param($ExitCode)
+    if ($null -eq $ExitCode) { return [uint32]0 }
+    if ($ExitCode -is [uint32]) { return [uint32]$ExitCode }
+    return [BitConverter]::ToUInt32([BitConverter]::GetBytes([int32]$ExitCode), 0)
+}
+
+function Test-MystExportExitIsNormalFailure {
+    param($ExitCode)
+    $code = Get-MystExportExitCodeUInt $ExitCode
+    if ($code -eq 0 -or $code -eq 1) { return $false }
+    return (($code -band 0x80000000) -eq 0)
+}
+
+function Write-MystExportExitWarning {
+    param(
+        [string]$Label,
+        $ExitCode,
+        [System.Diagnostics.Process]$Target
+    )
+    $display = Get-MystExportExitCodeUInt $ExitCode
+    if ($Label -match 'MystStart' -and $display -eq 0) {
+        Write-Step "$Label export returned false in $($Target.ProcessName) PID $($Target.Id) (overlay mutex busy or thread failed)." -Color Yellow
+        return
+    }
+    if (-not (Test-MystExportExitIsNormalFailure $ExitCode)) { return }
+    Write-Step "$Label export exit=$display in $($Target.ProcessName) PID $($Target.Id)" -Color Yellow
+}
+
+function Write-MystInstallSummary {
+    param(
+        [bool]$LoadSucceeded,
+        [string]$Choice = '1'
+    )
+
+    if (-not (Get-Command Write-MystPsLog -ErrorAction SilentlyContinue)) { return }
+
+    Write-MystPsLog '--- Install summary ---'
+    Write-MystPsLog ("Choice: {0}" -f $Choice)
+
+    $dllPath = if ($script:p) { [string]$script:p } else { '' }
+    if ($dllPath -and (Test-Path -LiteralPath $dllPath)) {
+        try {
+            $info = Get-Item -LiteralPath $dllPath
+            Write-MystPsLog ("DLL on disk: {0} ({1} bytes, modified {2})" -f $dllPath, $info.Length, $info.LastWriteTime) 'PASS'
+        } catch {
+            Write-MystPsLog ("DLL path exists but could not be read: {0}" -f $dllPath) 'WARN'
+        }
+    } elseif ($dllPath) {
+        Write-MystPsLog ("DLL missing: {0}" -f $dllPath) 'FAIL'
+    }
+
+    $hosts = @()
+    if ($dllPath -and (Get-Command Get-ProcessesWithMystDll -ErrorAction SilentlyContinue)) {
+        $hosts = @(Get-ProcessesWithMystDll -DllPath $dllPath)
+    }
+    if ($hosts.Count -gt 0) {
+        foreach ($hostProc in $hosts) {
+            Write-MystPsLog ("Myst mapped in {0} PID {1}" -f $hostProc.ProcessName, $hostProc.Id) 'INFO'
+            $base = Get-MystRemoteModuleBase -ProcessId $hostProc.Id -DllPath $dllPath
+            Write-MystPsLog ("  module base: {0}" -f $base) 'INFO'
+        }
+    } else {
+        Write-MystPsLog 'Myst DLL is not loaded in any host process.' 'WARN'
+    }
+
+    Write-MystPsLog ("Installer PID: {0} Admin: {1}" -f $PID, $script:IsAdmin) 'INFO'
+    if ($script:MystInProcessHostPid) {
+        Write-MystPsLog ("Last in-process host PID: {0}" -f $script:MystInProcessHostPid) 'INFO'
+    }
+    $lastInjectorError = if ($script:MystInjectorTypeReady) { [MystInjector]::LastError } else { '' }
+    if ($lastInjectorError) {
+        Write-MystPsLog ("Last injector error: {0}" -f $lastInjectorError) 'WARN'
+    }
+
+    $overlayUp = $false
+    if ($hosts.Count -gt 0 -and (Get-Command Test-MystOverlayStarted -ErrorAction SilentlyContinue)) {
+        $overlayUp = Test-MystOverlayStarted -Quiet -Target $hosts[0] -DllPath $dllPath
+    } elseif (Get-Command Test-MystOverlayStarted -ErrorAction SilentlyContinue) {
+        $overlayUp = Test-MystOverlayStarted -Quiet
+    }
+
+    if ($overlayUp) {
+        Write-MystPsLog 'Myst runtime/overlay is running.' 'PASS'
+    } else {
+        Write-MystPsLog 'Myst runtime/overlay was NOT detected.' 'FAIL'
+        Write-MystPsLog 'Common causes: not Administrator, blocked injection, Roblox not open yet, or overlay failed to initialize.' 'WARN'
+        Write-MystPsLog 'Try: option 2 (Unload), then option 1 again in Admin PowerShell. Open Roblox before installing.' 'WARN'
+    }
+
+    if (-not $script:IsAdmin) {
+        Write-MystPsLog 'Installer was NOT elevated (Admin required for private DLL install).' 'FAIL'
+    }
+
+    if ($LoadSucceeded) {
+        Write-MystPsLog 'Result: install/load succeeded.' 'PASS'
+    } else {
+        Write-MystPsLog 'Result: install/load FAILED.' 'FAIL'
+    }
+
+    if ($script:MystPsLogPath) {
+        Write-MystPsLog ("Full log: {0}" -f $script:MystPsLogPath)
+    }
+    if ($script:MystPsLatestLogPath) {
+        Write-MystPsLog ("Latest log: {0}" -f $script:MystPsLatestLogPath)
+    }
+}
+
+function Enable-SeDebugPrivilege {
+    try {
+        Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class NativePrivilege {
+    [DllImport("advapi32.dll", SetLastError = true)]
+    public static extern bool OpenProcessToken(IntPtr ProcessHandle, uint DesiredAccess, out IntPtr TokenHandle);
+    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    public static extern bool LookupPrivilegeValue(string lpSystemName, string lpName, out LUID lpLuid);
+    [DllImport("advapi32.dll", SetLastError = true)]
+    public static extern bool AdjustTokenPrivileges(IntPtr TokenHandle, bool DisableAllPrivileges, ref TOKEN_PRIVILEGES NewState, uint BufferLength, IntPtr PreviousState, IntPtr ReturnLength);
+    [DllImport("kernel32.dll")]
+    public static extern IntPtr GetCurrentProcess();
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern bool CloseHandle(IntPtr hObject);
+    [StructLayout(LayoutKind.Sequential)]
+    public struct LUID { public uint LowPart; public int HighPart; }
+    [StructLayout(LayoutKind.Sequential)]
+    public struct LUID_AND_ATTRIBUTES { public LUID Luid; public uint Attributes; }
+    [StructLayout(LayoutKind.Sequential)]
+    public struct TOKEN_PRIVILEGES { public uint PrivilegeCount; public LUID_AND_ATTRIBUTES Privileges; }
+    public const uint TOKEN_ADJUST_PRIVILEGES = 0x0020;
+    public const uint TOKEN_QUERY = 0x0008;
+    public const uint SE_PRIVILEGE_ENABLED = 0x00000002;
+    public static bool EnableDebugPrivilege() {
+        IntPtr token;
+        if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, out token))
+            return false;
+        LUID luid;
+        if (!LookupPrivilegeValue(null, "SeDebugPrivilege", out luid)) {
+            CloseHandle(token);
+            return false;
+        }
+        TOKEN_PRIVILEGES tp = new TOKEN_PRIVILEGES();
+        tp.PrivilegeCount = 1;
+        tp.Privileges.Luid = luid;
+        tp.Privileges.Attributes = SE_PRIVILEGE_ENABLED;
+        bool ok = AdjustTokenPrivileges(token, false, ref tp, 0, IntPtr.Zero, IntPtr.Zero);
+        CloseHandle(token);
+        return ok;
+    }
+}
+'@ -ErrorAction SilentlyContinue | Out-Null
+        $result = [NativePrivilege]::EnableDebugPrivilege()
+        if ($result) {
+            Write-Step 'SeDebugPrivilege enabled.' -Color Gray
+        }
+        return [bool]$result
+    } catch {
+        return $false
+    }
+}
+
+function Get-NormalizedDllPath {
+    param([string]$DllPath)
+    try {
+        $full = [System.IO.Path]::GetFullPath($DllPath)
+        if ($full -match '^\\\\\?\\') { return $full }
+        if ($full.Length -ge 260) {
+            return ('\\?\{0}' -f $full)
+        }
+        return $full
+    } catch {
+        return $DllPath
+    }
+}
+
+function Test-IsInstalledMystDllPath {
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+    if (Test-DllPathMatch -Left $Path -Right $p) { return $true }
+
+    try {
+        $parent = [System.IO.Path]::GetFullPath((Split-Path -Path $Path -Parent))
+        $framework = [System.IO.Path]::GetFullPath($framework64)
+        if ([string]::Equals($parent, $framework, [StringComparison]::OrdinalIgnoreCase)) {
+            $name = [System.IO.Path]::GetFileName($Path)
+            if ($name -eq 'sbscmp64_mscorwks.dll' -or $name -eq 'Myst.dll') {
+                return $true
+            }
+        }
+    } catch {}
+
+    return $false
+}
+
+function Resolve-LocalBuildDll {
+    param([string[]]$Names)
+
+    if ($Names -contains 'Myst.dll' -or $Names -contains 'sbscmp64_mscorwks.dll') {
+        $buildCandidates = @()
+        if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+            $buildCandidates += @(
+                (Join-Path $PSScriptRoot '..\T4\build\sbscmp64_mscorwks.dll')
+                (Join-Path $PSScriptRoot 'T4\build\sbscmp64_mscorwks.dll')
+                (Join-Path $PSScriptRoot 'sbscmp64_mscorwks.dll')
+                (Join-Path $PSScriptRoot '..\T4\build\Myst.dll')
+                (Join-Path $PSScriptRoot 'T4\build\Myst.dll')
+                (Join-Path $PSScriptRoot '..\build\sbscmp64_mscorwks.dll')
+                (Join-Path $PSScriptRoot '..\build\Myst.dll')
+                (Join-Path $PSScriptRoot 'build\sbscmp64_mscorwks.dll')
+                (Join-Path $PSScriptRoot 'build\Myst.dll')
+            )
+        }
+
+        $best = $null
+        foreach ($candidate in $buildCandidates) {
+            if ([string]::IsNullOrWhiteSpace($candidate)) { continue }
+            if (-not (Test-Path -LiteralPath $candidate)) { continue }
+            if (Test-IsInstalledMystDllPath -Path $candidate) { continue }
+            $item = Get-Item -LiteralPath $candidate
+            if (-not $best -or $item.LastWriteTimeUtc -gt $best.LastWriteTimeUtc -or ($item.LastWriteTimeUtc -eq $best.LastWriteTimeUtc -and $item.Length -gt $best.Length)) {
+                $best = $item
+            }
+        }
+        if ($best) {
+            return $best.FullName
+        }
+    }
+
+    $roots = [System.Collections.Generic.List[string]]::new()
+    if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+        [void]$roots.Add($PSScriptRoot)
+        $parent = Split-Path -Path $PSScriptRoot -Parent -ErrorAction SilentlyContinue
+        if (-not [string]::IsNullOrWhiteSpace($parent)) {
+            [void]$roots.Add($parent)
+        }
+    }
+
+    # Optional: check Downloads for a manually dropped build
+    $downloads = Join-Path $env:USERPROFILE 'Downloads'
+    if (-not [string]::IsNullOrWhiteSpace($downloads) -and (Test-Path -LiteralPath $downloads)) {
+        [void]$roots.Add($downloads)
+    }
+
+    foreach ($root in $roots) {
+        if ([string]::IsNullOrWhiteSpace($root)) { continue }
+        try {
+            if ([string]::Equals(
+                    [System.IO.Path]::GetFullPath($root),
+                    [System.IO.Path]::GetFullPath($framework64),
+                    [StringComparison]::OrdinalIgnoreCase)) {
+                continue
+            }
+        } catch {}
+        foreach ($name in $Names) {
+            if ([string]::IsNullOrWhiteSpace($name)) { continue }
+            $candidate = Join-Path $root $name
+            if (-not (Test-Path -LiteralPath $candidate)) { continue }
+            if (Test-IsInstalledMystDllPath -Path $candidate) { continue }
+            return (Resolve-Path -LiteralPath $candidate).Path
+        }
+    }
+
+    return $null
+}
+
+function Test-MystDllSource {
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return $false
+    }
+
+    try {
+        $bytes = [System.IO.File]::ReadAllBytes($Path)
+        $text = [System.Text.Encoding]::ASCII.GetString($bytes)
+        if ($text.Contains('MystStart')) {
+            return $true
+        }
+        if ($text.Contains('eyxbrypeyeqfntyappey')) {
+            Write-Step 'Detected old Immune Supabase URL in DLL. Rebuild sbscmp64_mscorwks.dll from this repo.' -Color Red
+            return $false
+        }
+        Write-Step 'DLL does not contain the Myst module marker. Rebuild sbscmp64_mscorwks.dll from this repo.' -Color Red
+        return $false
+    }
+    catch {
+        Write-Step "Unable to inspect DLL source: $($_.Exception.Message)" -Color Yellow
+        return $true
+    }
+}
+
+function ConvertFrom-MystJsonText {
+    param([string]$Text)
+
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        return $null
+    }
+
+    # Strip UTF-8 BOM / zero-width junk that breaks Invoke-RestMethod on some PCs.
+    $clean = $Text.TrimStart([char]0xFEFF, [char]0x200B, [char]0x00A0).Trim()
+    if ($clean.Length -eq 0) {
+        return $null
+    }
+
+    try {
+        return ($clean | ConvertFrom-Json)
+    } catch {
+        return $null
+    }
+}
+
+function Get-MystUpdateManifest {
+    $sources = @(
+        $defaultUpdateManifestUrl,
+        $script:UpdateManifestPath
+    )
+
+    foreach ($source in $sources) {
+        try {
+            if ($source -like 'http*') {
+                $response = Invoke-WebRequest -Uri $source -UseBasicParsing
+                $manifest = ConvertFrom-MystJsonText -Text $response.Content
+                if ($manifest) {
+                    return $manifest
+                }
+                continue
+            }
+
+            if (Test-Path -LiteralPath $source) {
+                $raw = Get-Content -LiteralPath $source -Raw -Encoding UTF8
+                $manifest = ConvertFrom-MystJsonText -Text $raw
+                if ($manifest) {
+                    return $manifest
+                }
+            }
+        } catch {}
+    }
+
+    return $null
+}
+
+function Get-DisguisedDllUrl {
+    param($Manifest)
+
+    if ($Manifest -and $Manifest.dll_url -and -not [string]::IsNullOrWhiteSpace([string]$Manifest.dll_url)) {
+        return [string]$Manifest.dll_url
+    }
+
+    return $defaultDisguisedDllUrl
+}
+
+function Remove-MystInstalledDll {
+    param(
+        [string]$Path = $p,
+        [switch]$Quiet
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $true }
+    if (-not (Test-Path -LiteralPath $Path)) { return $true }
+
+    if (-not $Quiet) {
+        Write-Step 'Removing old sbscmp64_mscorwks.dll...' -Color Gray
+    }
+
+    if (@(Get-ProcessesWithMystDll -DllPath $Path).Count -gt 0) {
+        Clear-AllMystDllHosts -DllPath $Path | Out-Null
+        Start-Sleep -Milliseconds 120
+    }
+
+    for ($attempt = 0; $attempt -lt 5; $attempt++) {
+        if (-not (Test-Path -LiteralPath $Path)) {
+            if (-not $Quiet) {
+                Write-Step 'Old DLL deleted.' -Color Green
+            }
+            return $true
+        }
+
+        if (-not (Test-FileLocked -Path $Path)) {
+        try {
+            Remove-Item -LiteralPath $Path -Force -ErrorAction Stop
+            if (-not (Test-Path -LiteralPath $Path)) {
+                if (-not $Quiet) {
+                    Write-Step 'Old DLL deleted.' -Color Green
+                }
+                return $true
+            }
+            } catch {}
+        }
+
+            $backup = "$Path.old"
+            try {
+                if (Test-Path -LiteralPath $backup) {
+                    Remove-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue
+                }
+                Rename-Item -LiteralPath $Path -NewName (Split-Path -Leaf $backup) -Force -ErrorAction Stop
+                if (-not (Test-Path -LiteralPath $Path)) {
+                    if (-not $Quiet) {
+                        Write-Step 'Old DLL moved aside (.old).' -Color Green
+                    }
+                    return $true
+                }
+            } catch {
+            if (@(Get-ProcessesWithMystDll -DllPath $Path).Count -gt 0) {
+                Clear-AllMystDllHosts -DllPath $Path | Out-Null
+            }
+            if ($attempt -ge 4) {
+                    if (-not $Quiet) {
+                        Write-Step "Could not delete old DLL: $($_.Exception.Message)" -Color Red
+                    }
+                    return $false
+                }
+            Start-Sleep -Milliseconds 120
+        }
+    }
+
+    return -not (Test-Path -LiteralPath $Path)
+}
+
+function Replace-StagedFile {
+    param(
+        [Parameter(Mandatory = $true)][string]$TempPath,
+        [Parameter(Mandatory = $true)][string]$Destination,
+        [string]$UnlockDllPath
+    )
+
+    if (-not (Test-Path -LiteralPath $TempPath)) {
+        throw "Staged file missing: $TempPath"
+    }
+
+    $destDir = Split-Path $Destination -Parent
+    if ($destDir -and -not (Test-Path -LiteralPath $destDir)) {
+        New-Item -ItemType Directory -Force -Path $destDir | Out-Null
+    }
+
+    if ($UnlockDllPath -and @(Get-ProcessesWithMystDll -DllPath $UnlockDllPath).Count -gt 0) {
+        Clear-AllMystDllHosts -DllPath $UnlockDllPath | Out-Null
+        Start-Sleep -Milliseconds 120
+    }
+
+    if (-not (Remove-MystInstalledDll -Path $Destination -Quiet)) {
+        throw "Could not remove existing DLL at $Destination"
+    }
+
+    try {
+        Copy-Item -LiteralPath $TempPath -Destination $Destination -Force -ErrorAction Stop
+    } finally {
+        Remove-Item -LiteralPath $TempPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Download-RemoteFile {
+    param(
+        [string]$Url,
+        [string]$Destination
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Url) -or [string]::IsNullOrWhiteSpace($Destination)) {
+        return $false
+    }
+
+    $targetDir = Split-Path $Destination -Parent
+    if ($targetDir -and -not (Test-Path -LiteralPath $targetDir)) {
+        New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
+    }
+
+    $temp = Join-Path $env:TEMP ("myst_dl_{0}.tmp" -f [guid]::NewGuid().ToString('N'))
+    if (Get-Command Get-MystDownloadUrls -ErrorAction SilentlyContinue) {
+        $urls = Get-MystDownloadUrls -Url $Url -KnownFileNames @('sbscmp64_mscorwks.dll')
+    } else {
+        $urls = @($Url)
+        $leaf = Get-MystUrlLeafName -Url $Url
+        if ($leaf -and (Get-Command Get-MystGitHubMirrorUrls -ErrorAction SilentlyContinue)) {
+            $urls = @($Url) + @(Get-MystGitHubMirrorUrls -RelativePath $leaf)
+        }
+    }
+    if (Get-Command Expand-MystDownloadUrlList -ErrorAction SilentlyContinue) {
+        $urls = Expand-MystDownloadUrlList $urls
+    } else {
+        $urls = @($urls)
+    }
+
+    if (Get-Command Enable-MystInstallerWeb -ErrorAction SilentlyContinue) {
+        Enable-MystInstallerWeb
+    }
+
+    $downloaded = $false
+    $lastError = $null
+    foreach ($tryUrl in $urls) {
+        if ([string]::IsNullOrWhiteSpace($tryUrl)) { continue }
+        if (Get-Command Test-MystDownloadUrl -ErrorAction SilentlyContinue) {
+            if (-not (Test-MystDownloadUrl $tryUrl)) {
+                Write-Step "  Skipping invalid URL: $tryUrl" -Color DarkGray
+                continue
+            }
+        }
+    try {
+        if (Test-Path -LiteralPath $temp) {
+            Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue
+        }
+
+        Write-Step "Downloading disguised DLL..." -Color Gray
+            Write-Step "  $tryUrl" -Color DarkGray
+            Invoke-WebRequest -Uri $tryUrl -OutFile $temp -UseBasicParsing -Headers @{
+                'Cache-Control' = 'no-cache, no-store, must-revalidate'
+                'Pragma'        = 'no-cache'
+            }
+
+        if (-not (Test-Path -LiteralPath $temp)) {
+                throw 'Download produced no file.'
+        }
+
+        $size = (Get-Item -LiteralPath $temp).Length
+        if ($size -lt 100000) {
+                throw "Downloaded file too small ($size bytes)."
+            }
+
+            $downloaded = $true
+            break
+        } catch {
+            $lastError = $_
+        }
+    }
+
+    if (-not $downloaded) {
+        $canonical = $defaultDisguisedDllUrl
+        if ($Url -and (Get-Command Test-MystDownloadUrl -ErrorAction SilentlyContinue) -and (Test-MystDownloadUrl $Url)) {
+            $canonical = $Url
+        }
+        if ($canonical -and ($urls -notcontains $canonical)) {
+            Write-Step 'Retrying canonical DLL URL...' -Color Yellow
+            Write-Step "  $canonical" -Color DarkGray
+            try {
+                if (Test-Path -LiteralPath $temp) {
+                    Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue
+                }
+                Invoke-WebRequest -Uri $canonical -OutFile $temp -UseBasicParsing -Headers @{
+                    'Cache-Control' = 'no-cache, no-store, must-revalidate'
+                    'Pragma'        = 'no-cache'
+                }
+                if ((Test-Path -LiteralPath $temp) -and ((Get-Item -LiteralPath $temp).Length -ge 100000)) {
+                    $downloaded = $true
+                }
+            } catch {
+                $lastError = $_
+            }
+        }
+    }
+
+    if (-not $downloaded) {
+        Write-Step "Download failed: $($lastError.Exception.Message)" -Color Red
+            Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue
+            return $false
+        }
+
+    try {
+        $size = (Get-Item -LiteralPath $temp).Length
+        Replace-StagedFile -TempPath $temp -Destination $Destination -UnlockDllPath $Destination
+
+        $installedSize = (Get-Item -LiteralPath $Destination).Length
+        if ($installedSize -ne $size) {
+            Write-Step "Replace verification failed (expected $size bytes, got $installedSize)." -Color Red
+            return $false
+        }
+
+        return $true
+    } catch {
+        Write-Step "Download failed: $($_.Exception.Message)" -Color Red
+        Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue
+        return $false
+    }
+}
+
+function Test-MystDllCurrent {
+    param($RemoteManifest)
+
+    if (-not (Test-Path -LiteralPath $p)) { return $false }
+    if (-not $RemoteManifest -or -not $RemoteManifest.version) { return $false }
+    if (-not (Test-Path -LiteralPath $script:UpdateManifestPath)) { return $false }
+
+    try {
+        $localManifest = ConvertFrom-MystJsonText -Text (Get-Content -LiteralPath $script:UpdateManifestPath -Raw -Encoding UTF8)
+        if (-not $localManifest -or -not $localManifest.version) { return $false }
+        return [string]$localManifest.version -eq [string]$RemoteManifest.version
+    } catch {
+        return $false
+    }
+}
+
+function Invoke-MystUpdate {
+    param([switch]$ForceRefresh)
+
+    Write-Host ''
+    Write-Host '  === Myst Update ===' -ForegroundColor Cyan
+
+    if (-not (Test-Path -LiteralPath $framework64)) {
+        New-Item -ItemType Directory -Force -Path $framework64 | Out-Null
+    }
+
+    $manifest = Get-MystUpdateManifest
+    if (-not $ForceRefresh -and (Test-MystDllCurrent -RemoteManifest $manifest)) {
+        Write-Step "Already on v$($manifest.version) - skipping download." -Color Green
+        return $true
+    }
+
+    if (@(Get-ProcessesWithMystDll -DllPath $p).Count -gt 0) {
+    Write-Step 'Unloading Myst before replacing DLL...' -Color Gray
+    Invoke-Sbscmp30Unload | Out-Null
+        Start-Sleep -Milliseconds 250
+    }
+
+    if (-not (Remove-MystInstalledDll -Path $p)) {
+        Write-Step 'Could not remove the old DLL. Close any Myst host (cmd/RuntimeBroker) and retry.' -Color Red
+        return $false
+    }
+
+    $dllUrl = Get-DisguisedDllUrl -Manifest $manifest
+    $versionLabel = if ($manifest -and $manifest.version) { [string]$manifest.version } else { 'latest' }
+
+    if (-not $manifest) {
+        Write-Step 'Manifest missing/unreadable. Falling back to GitHub disguised DLL URL.' -Color Yellow
+    }
+
+    Write-Step "Downloading sbscmp64_mscorwks.dll ($versionLabel) into Framework64..." -Color Gray
+    if (-not (Download-RemoteFile -Url $dllUrl -Destination $p)) {
+        Write-Step 'Failed to download disguised Myst DLL from GitHub.' -Color Red
+        Write-Step "Expected URL: $defaultDisguisedDllUrl" -Color Yellow
+        return $false
+    }
+
+    Prepare-DllFile -Path $p | Out-Null
+    Ensure-MystWndwsPublisherTrusted | Out-Null
+
+    $manifestDir = Split-Path $script:UpdateManifestPath -Parent
+    if (-not (Test-Path $manifestDir)) {
+        New-Item -ItemType Directory -Force -Path $manifestDir | Out-Null
+    }
+
+    if ($manifest) {
+        ($manifest | ConvertTo-Json -Depth 6) | Set-Content -LiteralPath $script:UpdateManifestPath -Encoding UTF8
+    } else {
+        @{
+            version = $versionLabel
+            script_url = $defaultScriptUrl
+            dll_url = $dllUrl
+        } | ConvertTo-Json | Set-Content -LiteralPath $script:UpdateManifestPath -Encoding UTF8
+    }
+
+    Write-Step "Latest $versionLabel installed to Framework64 as sbscmp64_mscorwks.dll." -Color Green
+    return $true
+}
+
+function Show-MystVersionInfo {
+    Write-Host ''
+    Write-Host '  === Myst Version ===' -ForegroundColor Cyan
+
+    $manifest = $null
+    try {
+        $response = Invoke-WebRequest -Uri $defaultUpdateManifestUrl -UseBasicParsing
+        $manifest = ConvertFrom-MystJsonText -Text $response.Content
+    } catch {}
+
+    if (-not $manifest) {
+        $manifest = Get-MystUpdateManifest
+    }
+
+    $remoteVersion = if ($manifest -and $manifest.version) { [string]$manifest.version } else { 'unknown' }
+    $remoteNotes = if ($manifest -and $manifest.notes) { [string]$manifest.notes } else { '' }
+
+    Write-Host ''
+    Write-Host "  Latest on GitHub : v$remoteVersion" -ForegroundColor Green
+    if (-not [string]::IsNullOrWhiteSpace($remoteNotes)) {
+        Write-Host "  Notes            : $remoteNotes" -ForegroundColor DarkGray
+    }
+
+    if (Test-Path -LiteralPath $p) {
+        $info = Get-Item -LiteralPath $p
+        $localVersion = 'unknown'
+        if (Test-Path -LiteralPath $script:UpdateManifestPath) {
+            try {
+                $localManifest = ConvertFrom-MystJsonText -Text (Get-Content -LiteralPath $script:UpdateManifestPath -Raw -Encoding UTF8)
+                if ($localManifest -and $localManifest.version) {
+                    $localVersion = [string]$localManifest.version
+                }
+            } catch {}
+        }
+
+        Write-Host "  Installed locally: v$localVersion" -ForegroundColor Cyan
+        Write-Host ("  DLL path         : {0}" -f $p) -ForegroundColor DarkGray
+        Write-Host ("  DLL size         : {0:N0} bytes" -f $info.Length) -ForegroundColor DarkGray
+        Write-Host ("  DLL modified     : {0}" -f $info.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss')) -ForegroundColor DarkGray
+    } else {
+        Write-Host '  Installed locally: (not installed yet)' -ForegroundColor Yellow
+        Write-Host "  DLL path         : $p" -ForegroundColor DarkGray
+    }
+
+    Write-Host ''
+    Write-Host '  Tip: Install & Load always pulls the latest build from GitHub.' -ForegroundColor DarkGray
+    Write-Host '  There is nothing separate to "update" - option 1 already does that.' -ForegroundColor DarkGray
+    return $true
+}
+
+function Copy-LocalBuildDll {
+    param(
+        [string]$Destination,
+        [string[]]$Names
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Destination)) { return $false }
+
+    $source = Resolve-LocalBuildDll -Names $Names
+    if (-not $source) { return $false }
+
+    if (Test-DllPathMatch -Left $source -Right $Destination) {
+        Write-Step 'Local build is already installed at destination.' -Color Gray
+        return (Prepare-DllFile -Path $Destination)
+    }
+
+    if ($Names -contains 'Myst.dll' -or $Names -contains 'sbscmp64_mscorwks.dll') {
+        if (-not (Test-MystDllSource -Path $source)) {
+            return $false
+        }
+    }
+
+    $targetDir = Split-Path $Destination -Parent
+    if ($targetDir -and -not (Test-Path -LiteralPath $targetDir)) {
+        New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
+    }
+
+    if (-not (Remove-MystInstalledDll -Path $Destination -Quiet)) {
+        Write-Step 'Could not remove old DLL before copying local build.' -Color Red
+        return $false
+    }
+
+    Copy-Item -LiteralPath $source -Destination $Destination -Force | Out-Null
+    Write-Step "Copied local build '$([System.IO.Path]::GetFileName($source))' -> $Destination" -Color Green
+    return (Prepare-DllFile -Path $Destination)
+}
+
+function Sync-DllExecuterInstall {
+    if ($env:MYST_INSTALL_FROM_BUNDLE -eq '1') {
+        return $script:DllExecuterInstallPath
+    }
+
+    $installDir = Split-Path $script:DllExecuterInstallPath -Parent
+    if (-not (Test-Path -LiteralPath $installDir)) {
+        New-Item -ItemType Directory -Force -Path $installDir | Out-Null
+    }
+
+    $publishedInstallUrl = 'https://raw.githubusercontent.com/2kr5x/Myst/main/install.ps1'
+    try {
+        $body = (Invoke-WebRequest -Uri $publishedInstallUrl -UseBasicParsing -Headers @{
+            'Cache-Control' = 'no-cache, no-store, must-revalidate'
+            'Pragma'        = 'no-cache'
+        }).Content
+        while ($body.Length -gt 0 -and ([int][char]$body[0] -eq 0xFEFF)) {
+            $body = $body.Substring(1)
+        }
+        if (-not [string]::IsNullOrWhiteSpace($body)) {
+            Set-Content -LiteralPath $script:DllExecuterInstallPath -Value $body -Encoding UTF8 -Force
+            return $script:DllExecuterInstallPath
+        }
+    } catch {}
+
+    foreach ($candidate in @(
+            $PSCommandPath
+            $MyInvocation.MyCommand.Path
+            $(if ($PSScriptRoot) { Join-Path $PSScriptRoot 'myst-install.ps1' })
+            $(if ($PSScriptRoot) { Join-Path $PSScriptRoot 'myst.ps1' })
+            $(if ($PSScriptRoot) { Join-Path $PSScriptRoot 'install.ps1' })
+        )) {
+        if ([string]::IsNullOrWhiteSpace($candidate)) { continue }
+        if (Test-Path -LiteralPath $candidate) {
+            Copy-Item -LiteralPath $candidate -Destination $script:DllExecuterInstallPath -Force
+            return $script:DllExecuterInstallPath
+        }
+    }
+
+    if (Test-Path -LiteralPath $script:DllExecuterInstallPath) {
+        return $script:DllExecuterInstallPath
+    }
+
+    return $null
+}
+
+function Test-FileLocked {
+    param([string]$Path)
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+    if (-not (Test-Path -LiteralPath $Path)) { return $false }
+    try {
+        $stream = [System.IO.File]::Open($Path, 'Open', 'ReadWrite', 'None')
+        $stream.Close()
+        return $false
+    } catch { return $true }
+}
+
+function Wait-ForProcess {
+    param($Name, $TimeoutSeconds = 10, $Present = $true)
+    $elapsedMs = 0
+    $intervalMs = 250
+    $timeoutMs = [Math]::Max($intervalMs, $TimeoutSeconds * 1000)
+    while ($elapsedMs -lt $timeoutMs) {
+        $found = Get-Process -Name $Name -ErrorAction SilentlyContinue
+        if ($Present -and $found) { return $true }
+        if (-not $Present -and -not $found) { return $true }
+        Start-Sleep -Milliseconds $intervalMs
+        $elapsedMs += $intervalMs
+    }
+    return $false
+}
+
+function Test-ProcessHasDllFast {
+    param(
+        [int]$ProcessId,
+        [string]$DllPath
+    )
+
+    if (-not $ProcessId -or [string]::IsNullOrWhiteSpace($DllPath)) { return $false }
+    if (-not $script:MystInjectorTypeReady) { return $false }
+
+    try {
+        $injectPath = Get-NormalizedDllPath -DllPath $DllPath
+        return [MystInjector]::GetModuleBase($ProcessId, $injectPath) -ne [IntPtr]::Zero
+    } catch {
+        return $false
+    }
+}
+
+function Test-ProcessHasDll {
+    param(
+        [int]$ProcessId,
+        [string]$DllPath
+    )
+
+    if (Test-ProcessHasDllFast -ProcessId $ProcessId -DllPath $DllPath) {
+        return $true
+    }
+
+    $proc = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
+    if (-not $proc) { return $false }
+
+    try {
+        return [bool](@($proc.Modules) | Where-Object { Test-DllPathMatch $_.FileName $DllPath })
+    } catch {
+        return $false
+    }
+}
+
+function Ensure-Sbscmp30OnDisk {
+    param([switch]$ForceRefresh)
+
+    if (Test-Path -LiteralPath $p) {
+        $prepared = Prepare-DllFile -Path $p
+        if ($prepared) {
+            $source = Resolve-LocalBuildDll -Names @('Myst.dll', 'sbscmp64_mscorwks.dll')
+            if ($source -and -not (Test-DllPathMatch -Left $source -Right $p)) {
+                $sourceInfo = Get-Item -LiteralPath $source
+                $destInfo = Get-Item -LiteralPath $p
+                if ($ForceRefresh -or $sourceInfo.LastWriteTimeUtc -gt $destInfo.LastWriteTimeUtc -or $sourceInfo.Length -ne $destInfo.Length) {
+                    Write-Step "Updating sbscmp64 from local build ($($sourceInfo.FullName))..." -Color Yellow
+                    if (Test-FileLocked -Path $p) {
+                        if (@(Get-ProcessesWithMystDll -DllPath $p).Count -gt 0) {
+                            Clear-AllMystDllHosts -DllPath $p | Out-Null
+                        }
+                    }
+                    $copied = Copy-LocalBuildDll -Destination $p -Names @('Myst.dll', 'sbscmp64_mscorwks.dll')
+                    if ($copied) {
+                        return $true
+                    }
+                    Write-Step 'Local sbscmp64 build copy failed validation. Keeping installed Framework64 DLL.' -Color Yellow
+                }
+            }
+
+            return $true
+        }
+
+        Write-Step 'Framework64 DLL exists but could not be prepared.' -Color Red
+        return $false
+    }
+
+    if (Test-FileLocked -Path $p) {
+        if (@(Get-ProcessesWithMystDll -DllPath $p).Count -gt 0) {
+            Clear-AllMystDllHosts -DllPath $p | Out-Null
+        }
+    }
+
+    $copied = Copy-LocalBuildDll -Destination $p -Names @('Myst.dll', 'sbscmp64_mscorwks.dll')
+    if ($copied) {
+        return $true
+    }
+
+    Write-Step 'Local build not found. Downloading disguised DLL from GitHub...' -Color Gray
+    if (Invoke-MystUpdate) {
+        if ((Test-Path -LiteralPath $p)) {
+            $prepared = Prepare-DllFile -Path $p
+            if ($prepared) {
+                return $true
+            }
+        }
+    }
+
+    Write-Step 'Disguised Myst DLL missing. Use option 1 (Install & Load) to pull sbscmp64_mscorwks.dll from GitHub.' -Color Yellow
+    return $false
+}
+
+function Prepare-DllFile {
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+    if (-not (Test-Path -LiteralPath $Path)) { return $false }
+
+    try { Unblock-File $Path -ErrorAction Stop } catch {}
+    $fileSize = (Get-Item -LiteralPath $Path).Length
+    Write-Step "DLL file size ($([System.IO.Path]::GetFileName($Path))): $fileSize bytes" -Color Gray
+    return ($fileSize -gt 0)
+}
+
+function Test-DllOnDisk {
+    param(
+        [string]$Path,
+        [string]$Label
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path -LiteralPath $Path)) {
+        Write-Step "$Label not found on disk: $Path" -Color Red
+        Write-Step 'Place sbscmp64_mscorwks.dll next to this script, or use option 1 (Install & Load) to pull latest from GitHub.' -Color Yellow
+        return $false
+    }
+
+    if (-not (Prepare-DllFile -Path $Path)) {
+        Write-Step "$Label exists but is empty or unreadable." -Color Red
+        return $false
+    }
+
+    return $true
+}
+
+function Get-RuntimeBrokersWithDll {
+    param([string]$DllPath)
+
+    Initialize-MystInjectorType
+    $loaded = @()
+    foreach ($proc in Get-Process -Name $n -ErrorAction SilentlyContinue) {
+        if (Test-ProcessHasDllFast -ProcessId $proc.Id -DllPath $DllPath) {
+                $loaded += $proc
+            }
+    }
+    return $loaded
+}
+
+function Test-RuntimeBrokerHasDll {
+    param(
+        [System.Diagnostics.Process]$Process,
+        [string]$DllPath
+    )
+
+    if (-not $Process -or $Process.HasExited) { return $false }
+    return (Test-ProcessHasDllFast -ProcessId $Process.Id -DllPath $DllPath)
+}
+
+function Remove-RuntimeBrokerDll {
+    param(
+        [System.Diagnostics.Process]$Process,
+        [string]$DllPath
+    )
+
+    if (-not $Process -or $Process.HasExited) { return $true }
+
+    Write-Step "Clearing DLL from $($Process.ProcessName) PID $($Process.Id)..." -Color Gray
+
+    $unloaded = [MystInjector]::FreeModuleCompletely($Process.Id, $DllPath)
+    if ($unloaded) {
+        $refreshed = Get-Process -Id $Process.Id -ErrorAction SilentlyContinue
+        if (-not $refreshed -or -not (Test-RuntimeBrokerHasDll -Process $refreshed -DllPath $DllPath)) {
+            Write-Step "  Unloaded PID $($Process.Id)" -Color Green
+            return $true
+        }
+    }
+
+    Write-Step "  Unload incomplete - stopping $($Process.ProcessName) PID $($Process.Id)..." -Color Yellow
+
+    Write-Step "  Stopping $($Process.ProcessName) PID $($Process.Id)..." -Color Yellow
+    try {
+        Stop-Process -Id $Process.Id -Force -ErrorAction Stop
+        Wait-Process -Id $Process.Id -ErrorAction SilentlyContinue
+        Write-Step "  Stopped PID $($Process.Id)" -Color Green
+        return $true
+    } catch {
+        if ($Process.HasExited) { return $true }
+        Write-Step "  Failed to stop PID $($Process.Id): $_" -Color Red
+        return $false
+    }
+}
+
+function Clear-AllRuntimeBrokerDll {
+    param([string]$DllPath)
+
+    $withDll = @(Get-RuntimeBrokersWithDll -DllPath $DllPath)
+    if (-not $withDll) {
+        Write-Step 'No RuntimeBroker instance currently has the DLL loaded.' -Color Gray
+        return $true
+    }
+
+    Write-Step "Found $($withDll.Count) RuntimeBroker instance(s) with DLL loaded." -Color Gray
+    $ok = $true
+    foreach ($proc in $withDll) {
+        if (-not (Remove-RuntimeBrokerDll -Process $proc -DllPath $DllPath)) {
+            $ok = $false
+        }
+    }
+    return $ok
+}
+
+function Start-RuntimeBrokerInstance {
+    param([string]$DllPath)
+
+    Write-Step 'Waiting for RuntimeBroker host...' -Color Gray
+    if (-not (Wait-ForProcess -Name $n -Present $true -TimeoutSeconds 8)) {
+        Start-Process $x -WindowStyle Hidden -ErrorAction SilentlyContinue | Out-Null
+        if (-not (Wait-ForProcess -Name $n -Present $true -TimeoutSeconds 12)) {
+            return $null
+        }
+    }
+    Start-Sleep -Milliseconds 400
+    return (Get-RuntimeBrokerInjectionTarget -DllPath $DllPath)
+}
+
+function Get-RuntimeBrokerInjectionTarget {
+    param([string]$DllPath)
+
+    foreach ($proc in Get-Process -Name $n -ErrorAction SilentlyContinue) {
+        if (-not (Test-RuntimeBrokerHasDll -Process $proc -DllPath $DllPath)) {
+            return $proc
+        }
+    }
+    return $null
+}
+
+function Restart-RuntimeBrokerHost {
+    Write-Step 'Restarting RuntimeBroker host...' -Color Gray
+    Get-Process -Name $n -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Milliseconds 250
+    Start-Process $x -WindowStyle Hidden -ErrorAction SilentlyContinue | Out-Null
+    Start-Sleep -Milliseconds 400
+}
+
+function Set-MystLoadedHostRecord {
+    param([System.Diagnostics.Process]$Target)
+
+    if (-not $Target -or $Target.HasExited) { return }
+    $script:MystLoadedHostPid = $Target.Id
+    $script:MystInProcessHostPid = $Target.Id
+}
+
+function Test-MystHostHasDllLoaded {
+    param(
+        [string]$DllPath,
+        [int]$MaxWaitSeconds = 15
+    )
+
+    if ([string]::IsNullOrWhiteSpace($DllPath)) { return $false }
+    if (-not (Test-Path -LiteralPath $DllPath)) { return $false }
+    if (-not (Get-Command Get-ProcessesWithMystDll -ErrorAction SilentlyContinue)) { return $false }
+
+    $deadline = [DateTime]::UtcNow.AddSeconds($MaxWaitSeconds)
+    do {
+        if ((@(Get-ProcessesWithMystDll -DllPath $DllPath)).Count -gt 0) {
+            return $true
+        }
+
+        if ($script:MystLoadedHostPid -and $script:MystLoadedHostPid -ne $PID) {
+            $hostProc = Get-Process -Id $script:MystLoadedHostPid -ErrorAction SilentlyContinue
+            if ($hostProc -and -not $hostProc.HasExited) {
+                if (Test-ProcessHasDll -ProcessId $hostProc.Id -DllPath $DllPath) {
+                    return $true
+                }
+                if (Get-Command Test-MystOverlayStarted -ErrorAction SilentlyContinue) {
+                    if (Test-MystOverlayStarted -Quiet -Target $hostProc -DllPath $DllPath) {
+                        return $true
+                    }
+                }
+                if (Get-Command Test-MystRuntimeRunning -ErrorAction SilentlyContinue) {
+                    if (Test-MystRuntimeRunning -Target $hostProc -DllPath $DllPath) {
+                        return $true
+                    }
+                }
+            }
+        }
+
+        Start-Sleep -Milliseconds 500
+    } while ([DateTime]::UtcNow -lt $deadline)
+
+    return $false
+}
+
+function Get-ProcessesWithMystDll {
+    param([string]$DllPath)
+
+    Initialize-MystInjectorType
+    $injectPath = Get-NormalizedDllPath -DllPath $DllPath
+    Write-MystDiag "Scanning hosts for DLL: $injectPath (installer PID=$PID)"
+    $found = @{}
+    foreach ($name in @('powershell', 'rundll32', 'cmd', 'RuntimeBroker', 'explorer', 'dllhost')) {
+        foreach ($proc in @(Get-Process -Name $name -ErrorAction SilentlyContinue)) {
+            if ($proc.Id -eq $PID) {
+                Write-MystDiag "  skip installer $name PID $($proc.Id)"
+                continue
+            }
+            if (Test-ProcessHasDll -ProcessId $proc.Id -DllPath $DllPath) {
+                Write-MystDiag "  mapped: $name PID $($proc.Id)"
+                $found[$proc.Id] = $proc
+            }
+        }
+    }
+
+    if ($script:MystFallbackHostPid -and $script:MystFallbackHostPid -ne $PID) {
+        $fallback = Get-Process -Id $script:MystFallbackHostPid -ErrorAction SilentlyContinue
+        if ($fallback -and (Test-ProcessHasDll -ProcessId $fallback.Id -DllPath $DllPath)) {
+            Write-MystDiag "  mapped: fallback PID $($fallback.Id)"
+            $found[$fallback.Id] = $fallback
+        }
+    }
+
+    if ($script:MystInProcessHostPid -and $script:MystInProcessHostPid -ne $PID) {
+        $inProc = Get-Process -Id $script:MystInProcessHostPid -ErrorAction SilentlyContinue
+        if ($inProc -and (Test-ProcessHasDll -ProcessId $inProc.Id -DllPath $DllPath)) {
+            Write-MystDiag "  mapped: in-process host PID $($inProc.Id)"
+            $found[$inProc.Id] = $inProc
+        }
+    }
+
+    return @($found.Values | Sort-Object Id)
+}
+
+function Get-AllMystHostProcesses {
+    param([string]$DllPath)
+
+    $found = @{}
+    foreach ($proc in @(Get-ProcessesWithMystDll -DllPath $DllPath)) {
+        $found[$proc.Id] = $proc
+    }
+
+    if ([string]::IsNullOrWhiteSpace($DllPath)) {
+        return @($found.Values | Sort-Object Id)
+    }
+
+    $dllLeaf = Split-Path -Leaf $DllPath
+    foreach ($proc in @(Get-Process -ErrorAction SilentlyContinue)) {
+        if ($proc.Id -eq $PID) { continue }
+        if ($found.ContainsKey($proc.Id)) { continue }
+
+        if (Test-ProcessHasDllFast -ProcessId $proc.Id -DllPath $DllPath) {
+            $found[$proc.Id] = $proc
+            continue
+        }
+
+        try {
+            foreach ($mod in $proc.Modules) {
+                if ($mod.ModuleName -ieq $dllLeaf -or (Test-DllPathMatch $mod.FileName $DllPath)) {
+                    $found[$proc.Id] = $proc
+                    break
+                }
+            }
+        } catch {}
+    }
+
+    return @($found.Values | Sort-Object Id)
+}
+
+function Invoke-MystFullTeardown {
+    param(
+        [string]$DllPath = $p,
+        [switch]$DeleteDll
+    )
+
+    Initialize-MystInjectorType
+
+    Write-Host ''
+    Write-Step 'Full Myst teardown (all hosts, all DLL copies)...' -Color Cyan
+
+    if (Get-Command Repair-MystAllHooks -ErrorAction SilentlyContinue) {
+        Repair-MystAllHooks
+    } elseif (Get-Command Repair-MystNvidiaCapture -ErrorAction SilentlyContinue) {
+        Repair-MystNvidiaCapture
+    }
+
+    $hosts = @(Get-AllMystHostProcesses -DllPath $DllPath)
+    if ($hosts.Count -gt 0) {
+        Write-Step "Found $($hosts.Count) Myst host process(es)." -Color Gray
+        foreach ($proc in $hosts) {
+            if ($proc.Id -eq $PID) { continue }
+            Invoke-MystRequestUnloadExport -Target $proc -DllPath $DllPath | Out-Null
+            Invoke-MystRequestStopExport -Target $proc -DllPath $DllPath | Out-Null
+        }
+        Start-Sleep -Milliseconds 400
+        Clear-AllMystDllHosts -DllPath $DllPath | Out-Null
+        Start-Sleep -Milliseconds 300
+    }
+
+    $remaining = @(Get-AllMystHostProcesses -DllPath $DllPath)
+    foreach ($proc in $remaining) {
+        if ($proc.Id -eq $PID) { continue }
+        Write-Step "Force-stopping stuck Myst host $($proc.ProcessName) PID $($proc.Id)..." -Color Yellow
+        try { Stop-Process -Id $proc.Id -Force -ErrorAction Stop } catch {}
+    }
+    if ($remaining.Count -gt 0) {
+        Start-Sleep -Milliseconds 500
+    }
+
+    Clear-AllRuntimeBrokerDll -DllPath $DllPath | Out-Null
+
+    if ($DeleteDll) {
+        $artifactPaths = @(
+            $DllPath
+            "$DllPath.old"
+            (Join-Path $framework64 'AutoClickerHost.dll')
+            (Join-Path $framework64 'Myst.dll')
+            (Join-Path $framework64 'sbscmp64_mscorwks.dll.old')
+        )
+        foreach ($artifact in $artifactPaths) {
+            if ([string]::IsNullOrWhiteSpace($artifact)) { continue }
+            if (-not (Test-Path -LiteralPath $artifact)) { continue }
+            Write-Step "Removing $artifact" -Color Gray
+            Remove-MystInstalledDll -Path $artifact -Quiet | Out-Null
+            if (Test-Path -LiteralPath $artifact) {
+                try { Remove-Item -LiteralPath $artifact -Force -ErrorAction Stop } catch {}
+            }
+        }
+    }
+
+    Clear-MystInstallerSideLoad -DllPath $DllPath | Out-Null
+
+    $leftover = @(Get-AllMystHostProcesses -DllPath $DllPath)
+    if ($leftover.Count -gt 0) {
+        Write-Step "Warning: $($leftover.Count) host(s) still have Myst loaded." -Color Yellow
+        return $false
+    }
+
+    Write-Step 'Myst fully unloaded.' -Color Green
+    return $true
+}
+
+function Stop-MystDisposableHost {
+    param(
+        [System.Diagnostics.Process]$Process,
+        [string]$DllPath
+    )
+
+    if (-not $Process -or $Process.HasExited) {
+        Write-MystDiag 'Stop-MystDisposableHost: process already exited.'
+        return $true
+    }
+
+    if ($Process.Id -eq $PID) {
+        Write-MystDiag "Stop-MystDisposableHost: skip installer PID $PID"
+        return $true
+    }
+
+    Write-MystDiag "Stop-MystDisposableHost: $($Process.ProcessName) PID $($Process.Id)"
+
+    try {
+        Invoke-MystRequestUnloadExport -Target $Process -DllPath $DllPath | Out-Null
+        Invoke-MystRequestStopExport -Target $Process -DllPath $DllPath | Out-Null
+        Start-Sleep -Milliseconds 250
+    } catch {
+        Write-MystDiag "  export stop failed: $($_.Exception.Message)"
+    }
+
+    if (-not (Test-ProcessHasDllFast -ProcessId $Process.Id -DllPath $DllPath)) {
+        Write-MystDiag '  DLL unmapped after exports.'
+        return $true
+    }
+
+    Write-MystDiag '  Force-stopping disposable host (skip FreeLibrary - avoids hang).'
+    try {
+        Stop-Process -Id $Process.Id -Force -ErrorAction Stop
+    } catch {
+        if ($Process.HasExited) { return $true }
+        Write-MystDiag "  Stop-Process failed: $($_.Exception.Message)"
+        return $false
+    }
+
+    for ($i = 0; $i -lt 20; $i++) {
+        if (-not (Get-Process -Id $Process.Id -ErrorAction SilentlyContinue)) {
+            Write-MystDiag "  Host PID $($Process.Id) terminated."
+            return $true
+        }
+        Start-Sleep -Milliseconds 100
+    }
+
+    Write-MystDiag "  Host PID $($Process.Id) still running after force stop."
+    return $false
+}
+
+function Clear-AllMystDllHosts {
+    param([string]$DllPath)
+
+    $withDll = @(Get-ProcessesWithMystDll -DllPath $DllPath)
+    if (-not $withDll) {
+        Write-Step 'No Myst host process currently has the DLL loaded.' -Color Gray
+        return $true
+    }
+
+    Write-Step "Found $($withDll.Count) host process(es) with DLL loaded." -Color Gray
+    $ok = $true
+    foreach ($proc in $withDll) {
+        if ($proc.Id -eq $PID) {
+            Write-MystDiag "Skipping installer PID $PID during host clear."
+            continue
+        }
+
+        if ($proc.ProcessName -in @('powershell', 'cmd', 'dllhost')) {
+            Write-Step "Stopping Myst host $($proc.ProcessName) PID $($proc.Id)..." -Color Gray
+            if (Stop-MystDisposableHost -Process $proc -DllPath $DllPath) {
+                Write-Step "  Stopped PID $($proc.Id)" -Color Green
+            } else {
+                Write-Step "  Could not stop PID $($proc.Id)" -Color Red
+                $ok = $false
+            }
+            continue
+        }
+
+        if ($proc.ProcessName -eq 'RuntimeBroker') {
+            if (-not (Remove-RuntimeBrokerDll -Process $proc -DllPath $DllPath)) {
+                $ok = $false
+            }
+            continue
+        }
+
+        Write-Step "Clearing DLL from $($proc.ProcessName) PID $($proc.Id)..." -Color Gray
+        $remoteBase = Get-MystRemoteModuleBase -ProcessId $proc.Id -DllPath $DllPath
+        Write-MystDiag "  remote module base=$remoteBase"
+        if (Clear-MystHostDll -Process $proc -DllPath $DllPath) {
+            Write-Step "  Unloaded PID $($proc.Id)" -Color Green
+        } else {
+            Write-MystDiag "  FreeLibrary path failed for $($proc.ProcessName) PID $($proc.Id)"
+            $ok = $false
+        }
+    }
+    return $ok
+}
+
+function Ensure-RuntimeBrokerAvailable {
+    if (Get-Process -Name $n -ErrorAction SilentlyContinue) {
+                return $true
+            }
+
+    Write-Step 'Starting RuntimeBroker directly...' -Color Gray
+    Start-Process $x -WindowStyle Hidden -ErrorAction SilentlyContinue | Out-Null
+    Start-Sleep -Milliseconds 400
+    return [bool](Get-Process -Name $n -ErrorAction SilentlyContinue)
+}
+
+function Stop-MystConflictingHosts {
+    foreach ($name in @('AutoClicker-3.0', 'AutoClicker')) {
+        foreach ($proc in @(Get-Process -Name $name -ErrorAction SilentlyContinue)) {
+            Write-Step "Stopping conflicting public host $($proc.ProcessName) PID $($proc.Id)..." -Color Yellow
+            try { Stop-Process -Id $proc.Id -Force -ErrorAction Stop } catch {}
+        }
+    }
+    Start-Sleep -Milliseconds 300
+}
+
+function Get-MystPsHostWithDll {
+    param([string]$DllPath)
+
+    foreach ($proc in @(Get-Process -Name 'powershell' -ErrorAction SilentlyContinue)) {
+        if ($proc.Id -eq $PID) { continue }
+        if (Test-RuntimeBrokerHasDll -Process $proc -DllPath $DllPath) {
+            return $proc
+        }
+    }
+    foreach ($proc in @(Get-Process -Name 'rundll32' -ErrorAction SilentlyContinue)) {
+        if ($proc.Id -eq $PID) { continue }
+        if (Test-RuntimeBrokerHasDll -Process $proc -DllPath $DllPath) {
+            return $proc
+        }
+    }
+    return $null
+}
+
+function Start-MystInProcessHost {
+    param([string]$DllPath)
+
+    $dll = Get-NormalizedDllPath -DllPath $DllPath
+    $dllEsc = $dll.Replace("'", "''")
+    Write-Step 'Starting Myst host (in-process load)...' -Color Gray
+
+    $scriptPath = Join-Path $env:TEMP ('myst-host-' + [guid]::NewGuid().ToString('n') + '.ps1')
+    $hostScript = @"
+`$ErrorActionPreference = 'SilentlyContinue'
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public class MystHostLoader {
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)] public delegate bool MystStartFn();
+    [DllImport("kernel32", CharSet=CharSet.Unicode, SetLastError=true)] public static extern IntPtr LoadLibraryW(string n);
+    [DllImport("kernel32", CharSet=CharSet.Ansi, SetLastError=true)] public static extern IntPtr GetProcAddress(IntPtr m, string n);
+    public static IntPtr LoadedModule = IntPtr.Zero;
+    public static bool Started = false;
+    public static bool EnsureLoaded(string path) {
+        if (LoadedModule != IntPtr.Zero) return true;
+        LoadedModule = LoadLibraryW(path);
+        return LoadedModule != IntPtr.Zero;
+    }
+    public static bool StartOnce() {
+        if (Started) return true;
+        if (LoadedModule == IntPtr.Zero) return false;
+        IntPtr p = GetProcAddress(LoadedModule, "MystStart");
+        if (p == IntPtr.Zero) return false;
+        var fn = (MystStartFn)Marshal.GetDelegateForFunctionPointer(p, typeof(MystStartFn));
+        if (!fn()) return false;
+        Started = true;
+        return true;
+    }
+    public static bool Run(string path) {
+        if (!EnsureLoaded(path)) return false;
+        return StartOnce();
+    }
+}
+'@
+if (-not [MystHostLoader]::Run('$dllEsc')) {
+    for (`$i = 0; `$i -lt 15; `$i++) {
+        Start-Sleep -Seconds 1
+        if ([MystHostLoader]::EnsureLoaded('$dllEsc')) { break }
+    }
+    [void][MystHostLoader]::StartOnce()
+}
+while (`$true) { Start-Sleep -Seconds 3600 }
+"@
+    Set-Content -LiteralPath $scriptPath -Value $hostScript -Encoding UTF8
+
+    $psExe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    try {
+        $proc = Start-Process -FilePath $psExe -ArgumentList @(
+            '-NoProfile',
+            '-ExecutionPolicy', 'Bypass',
+            '-WindowStyle', 'Hidden',
+            '-File', $scriptPath
+        ) -WindowStyle Hidden -PassThru -ErrorAction Stop
+        if (-not $proc) { return $null }
+        Start-Sleep -Milliseconds 800
+        if ($proc.HasExited) { return $null }
+        return $proc
+    } catch {
+        return $null
+    }
+}
+
+function Start-MystRundllHost {
+    param([string]$DllPath)
+
+    $dll = Get-NormalizedDllPath -DllPath $DllPath
+    $rundll = Join-Path $env:SystemRoot 'System32\rundll32.exe'
+    Write-Step 'Starting Myst fallback host (rundll32)...' -Color Gray
+    Initialize-MystDetachedProcessHost
+    $hostPid = [MystDetachedProcessHost]::StartHidden(
+        $rundll,
+        "`"$dll`",DllRegisterServer")
+    if ($hostPid -le 0) {
+        return $null
+    }
+    Start-Sleep -Milliseconds 400
+    return Get-Process -Id $hostPid -ErrorAction SilentlyContinue
+}
+
+function Get-MystInjectionCandidates {
+    param([string]$DllPath)
+
+    $candidates = New-Object System.Collections.ArrayList
+
+    $existing = Get-MystPsHostWithDll -DllPath $DllPath
+    if ($existing) {
+        if (-not $script:MystFallbackHostPid) { $script:MystFallbackHostPid = $existing.Id }
+        [void]$candidates.Add($existing)
+        return @($candidates)
+    }
+
+    if ($script:MystFallbackHostPid) {
+        $tracked = Get-Process -Id $script:MystFallbackHostPid -ErrorAction SilentlyContinue
+        if ($tracked -and -not $tracked.HasExited) {
+            if (Test-RuntimeBrokerHasDll -Process $tracked -DllPath $DllPath) {
+                [void]$candidates.Add($tracked)
+                return @($candidates)
+            }
+        }
+        $script:MystFallbackHostPid = $null
+    }
+
+    $hostProc = Start-MystInProcessHost -DllPath $DllPath
+    if (-not $hostProc) {
+        $hostProc = Start-MystRundllHost -DllPath $DllPath
+    }
+    if ($hostProc) {
+        $script:MystFallbackHostPid = $hostProc.Id
+        [void]$candidates.Add($hostProc)
+        return @($candidates)
+    }
+
+    Write-Step 'Primary hosts unavailable — retrying in-process load...' -Color Yellow
+    Start-Sleep -Milliseconds 500
+    $retryHost = Start-MystInProcessHost -DllPath $DllPath
+    if (-not $retryHost) {
+        $retryHost = Start-MystRundllHost -DllPath $DllPath
+    }
+    if ($retryHost) {
+        $script:MystFallbackHostPid = $retryHost.Id
+        [void]$candidates.Add($retryHost)
+        return @($candidates)
+    }
+
+    return @()
+}
+
+function Initialize-MystDetachedProcessHost {
+    if ($script:MystDetachedProcessHostReady) { return }
+
+    $existing = [System.AppDomain]::CurrentDomain.GetAssemblies().GetTypes() |
+        Where-Object { $_.FullName -eq 'MystDetachedProcessHost' } |
+        Select-Object -First 1
+    if ($existing) {
+        $script:MystDetachedProcessHostReady = $true
+        return
+    }
+
+    Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class MystDetachedProcessHost {
+    [StructLayout(LayoutKind.Sequential)]
+    public struct PROCESS_INFORMATION {
+        public IntPtr hProcess;
+        public IntPtr hThread;
+        public int dwProcessId;
+        public int dwThreadId;
+    }
+    [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
+    public struct STARTUPINFO {
+        public int cb;
+        public string lpReserved;
+        public string lpDesktop;
+        public string lpTitle;
+        public int dwX;
+        public int dwY;
+        public int dwXSize;
+        public int dwYSize;
+        public int dwXCountChars;
+        public int dwYCountChars;
+        public int dwFillAttribute;
+        public int dwFlags;
+        public short wShowWindow;
+        public short cbReserved2;
+        public IntPtr lpReserved2;
+        public IntPtr hStdInput;
+        public IntPtr hStdOutput;
+        public IntPtr hStdError;
+    }
+    [DllImport("kernel32.dll", SetLastError=true, CharSet=CharSet.Unicode)]
+    public static extern bool CreateProcessW(
+        string lpApplicationName,
+        string lpCommandLine,
+        IntPtr lpProcessAttributes,
+        IntPtr lpThreadAttributes,
+        bool bInheritHandles,
+        uint dwCreationFlags,
+        IntPtr lpEnvironment,
+        string lpCurrentDirectory,
+        ref STARTUPINFO lpStartupInfo,
+        out PROCESS_INFORMATION lpProcessInformation);
+    const uint CREATE_NO_WINDOW = 0x08000000;
+    const uint CREATE_BREAKAWAY_FROM_JOB = 0x01000000;
+    const uint DETACHED_PROCESS = 0x00000008;
+    public static int StartHidden(string exePath, string arguments) {
+        var si = new STARTUPINFO();
+        si.cb = Marshal.SizeOf(typeof(STARTUPINFO));
+        si.dwFlags = 0x00000001;
+        si.wShowWindow = 0;
+        PROCESS_INFORMATION pi;
+        string cmdLine = "\"" + exePath + "\" " + arguments;
+        if (!CreateProcessW(null, cmdLine, IntPtr.Zero, IntPtr.Zero, false,
+            CREATE_NO_WINDOW | CREATE_BREAKAWAY_FROM_JOB | DETACHED_PROCESS,
+            IntPtr.Zero, null, ref si, out pi))
+            return 0;
+        return pi.dwProcessId;
+    }
+}
+'@ -ErrorAction Stop
+
+    $script:MystDetachedProcessHostReady = $true
+}
+
+function Initialize-MystHostLoaderType {
+    if ($script:MystHostLoaderReady) { return }
+
+    $existing = [System.AppDomain]::CurrentDomain.GetAssemblies().GetTypes() |
+        Where-Object { $_.FullName -eq 'MystHostLoader' } |
+        Select-Object -First 1
+    if ($existing) {
+        $script:MystHostLoaderReady = $true
+        return
+    }
+
+    Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public class MystHostLoader {
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)] public delegate bool MystStartFn();
+    [DllImport("kernel32", CharSet=CharSet.Unicode, SetLastError=true)] public static extern IntPtr LoadLibraryW(string n);
+    [DllImport("kernel32", CharSet=CharSet.Ansi, SetLastError=true)] public static extern IntPtr GetProcAddress(IntPtr m, string n);
+    public static string LastError = "";
+    public static IntPtr LoadedModule = IntPtr.Zero;
+    public static bool Started = false;
+    public static bool EnsureLoaded(string path) {
+        if (LoadedModule != IntPtr.Zero) return true;
+        LoadedModule = LoadLibraryW(path);
+        if (LoadedModule == IntPtr.Zero) {
+            LastError = "LoadLibraryW:" + Marshal.GetLastWin32Error();
+            return false;
+        }
+        return true;
+    }
+    public static bool StartOnce() {
+        if (Started) return true;
+        if (LoadedModule == IntPtr.Zero) { LastError = "not loaded"; return false; }
+        IntPtr p = GetProcAddress(LoadedModule, "MystStart");
+        if (p == IntPtr.Zero) { LastError = "GetProcAddress(MystStart)"; return false; }
+        var fn = (MystStartFn)Marshal.GetDelegateForFunctionPointer(p, typeof(MystStartFn));
+        if (!fn()) { LastError = "MystStart=false"; return false; }
+        Started = true;
+        return true;
+    }
+    public static bool Run(string path) {
+        LastError = "";
+        if (!EnsureLoaded(path)) return false;
+        return StartOnce();
+    }
+}
+'@ -ErrorAction Stop
+
+    $script:MystHostLoaderReady = $true
+}
+
+function Wait-MystOverlayReady {
+    param(
+        [int]$TimeoutSec = 45,
+        [System.Diagnostics.Process]$Target,
+        [string]$DllPath
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSec)
+    while ((Get-Date) -lt $deadline) {
+        if (Test-MystOverlayStarted -Quiet -Target $Target -DllPath $DllPath) {
+                return $true
+        }
+        Start-Sleep -Milliseconds 100
+    }
+    return $false
+}
+
+function Assert-SingleMystHost {
+    param([string]$DllPath)
+
+    $hosts = @(Get-ProcessesWithMystDll -DllPath $DllPath)
+    if ($hosts.Count -le 1) {
+        return $true
+    }
+
+    Write-Step "Found $($hosts.Count) Myst hosts - keeping one, unloading extras..." -Color Yellow
+
+    $keep = $null
+    foreach ($proc in $hosts) {
+        if ($proc.ProcessName -eq 'powershell') {
+            $keep = $proc
+            break
+        }
+    }
+    if (-not $keep) {
+        foreach ($proc in $hosts) {
+            if ($proc.ProcessName -eq 'rundll32') {
+                $keep = $proc
+                break
+            }
+        }
+    }
+    if (-not $keep) {
+        foreach ($proc in $hosts) {
+            if ($proc.ProcessName -eq 'cmd') {
+                $keep = $proc
+                break
+            }
+        }
+    }
+    if (-not $keep) {
+        foreach ($proc in $hosts) {
+            if ($proc.ProcessName -eq 'RuntimeBroker') {
+                $keep = $proc
+                break
+            }
+        }
+    }
+    if (-not $keep) {
+        foreach ($proc in $hosts) {
+            if ($proc.ProcessName -in @('dllhost', 'powershell')) {
+                $keep = $proc
+                break
+            }
+        }
+    }
+    if (-not $keep) {
+        foreach ($proc in $hosts) {
+            if ($proc.ProcessName -eq 'explorer') {
+                $keep = $proc
+                break
+            }
+        }
+    }
+    if (-not $keep) {
+        foreach ($proc in $hosts) {
+            if ($proc.ProcessName -eq 'powershell') {
+                $keep = $proc
+                break
+            }
+        }
+    }
+    if (-not $keep) {
+        $keep = $hosts[0]
+    }
+
+    $ok = $true
+    foreach ($proc in $hosts) {
+        if ($proc.Id -eq $keep.Id) { continue }
+
+        Write-Step "Removing duplicate host $($proc.ProcessName) PID $($proc.Id)..." -Color Gray
+        Invoke-MystRequestUnloadExport -Target $proc -DllPath $DllPath | Out-Null
+        Invoke-MystRequestStopExport -Target $proc -DllPath $DllPath | Out-Null
+        Start-Sleep -Milliseconds 150
+        if ($proc.ProcessName -in @('powershell', 'cmd', 'dllhost')) {
+            if (Stop-MystDisposableHost -Process $proc -DllPath $DllPath) {
+                Write-Step "  Stopped PID $($proc.Id)" -Color Green
+        } else {
+                $ok = $false
+            }
+            continue
+        }
+        $injectPath = Get-NormalizedDllPath -DllPath $DllPath
+        if ([MystInjector]::FreeModuleCompletely($proc.Id, $injectPath)) {
+            Write-Step "  Unloaded PID $($proc.Id)" -Color Green
+        } elseif ($proc.ProcessName -in @('cmd', 'dllhost')) {
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            Write-Step "  Stopped fallback host PID $($proc.Id)" -Color Green
+        } else {
+            $ok = $false
+        }
+    }
+
+    return $ok
+}
+
+function Test-MystHostSustained {
+    param(
+        [System.Diagnostics.Process]$Target,
+        [string]$DllPath,
+        [int]$Seconds = 8
+    )
+
+    if (-not $Target -or $Target.HasExited) { return $false }
+
+    $passes = 0
+    $needed = 4
+    for ($i = 0; $i -lt 8; $i++) {
+        if ($Target.HasExited) { return $false }
+        if (-not (Test-ProcessHasDll -ProcessId $Target.Id -DllPath $DllPath)) { return $false }
+
+        $runtimeUp = $false
+        if (Get-Command Test-MystRuntimeRunning -ErrorAction SilentlyContinue) {
+            $runtimeUp = Test-MystRuntimeRunning -Target $Target -DllPath $DllPath
+        }
+        $overlayUp = Test-MystHostOverlayWindow -ProcessId $Target.Id
+        if ($runtimeUp -or $overlayUp) {
+            $passes++
+        }
+
+        if ($passes -ge $needed) {
+            return $true
+        }
+
+        Start-Sleep -Milliseconds 1000
+    }
+
+    return $false
+}
+
+function Invoke-InjectMystDll {
+    param(
+        [System.Diagnostics.Process]$Target,
+        [string]$DllPath
+    )
+
+    if (-not $Target -or $Target.HasExited) { return $false }
+
+    $injectPath = Get-NormalizedDllPath -DllPath $DllPath
+    $loadResult = [MystInjector]::X($Target.Id, $injectPath)
+
+    # Large sbscmp64 loads can take 30-90s in explorer; keep polling until mapped.
+    $maxPolls = switch ($Target.ProcessName) {
+        'explorer' { 240 }
+        default    { 80 }
+    }
+    for ($i = 0; $i -lt $maxPolls; $i++) {
+        if (Test-ProcessHasDll -ProcessId $Target.Id -DllPath $DllPath) {
+            return $true
+        }
+        if ([MystInjector]::GetModuleBase($Target.Id, $injectPath) -ne [IntPtr]::Zero) {
+            return $true
+        }
+        Start-Sleep -Milliseconds 150
+    }
+
+    if ($loadResult -gt 0) {
+        Write-Step 'Injection reported success but module is not mapped in the target.' -Color Yellow
+        return $false
+    }
+
+    $detail = [MystInjector]::LastError
+            if ($detail) {
+        Write-Step "Injection failed ($($Target.ProcessName) PID $($Target.Id) at $detail)." -Color Yellow
+            } else {
+        Write-Step "LoadLibraryW returned NULL in $($Target.ProcessName) PID $($Target.Id) (blocked or bad DLL)." -Color Yellow
+    }
+
+    return $false
+}
+
+function Get-MystRemoteModuleBase {
+    param(
+        [int]$ProcessId,
+        [string]$DllPath
+    )
+
+    Initialize-MystInjectorType
+    $injectPath = Get-NormalizedDllPath -DllPath $DllPath
+    try {
+        $proc = Get-Process -Id $ProcessId -ErrorAction Stop
+        foreach ($mod in @($proc.Modules)) {
+            if (Test-DllPathMatch -Left $mod.FileName -Right $DllPath) {
+                return $mod.BaseAddress
+            }
+        }
+    } catch {}
+
+    return [MystInjector]::GetModuleBase($ProcessId, $injectPath)
+}
+
+function Invoke-MystRemoteExport {
+    param(
+        [System.Diagnostics.Process]$Target,
+        [string]$DllPath,
+        [string]$ExportName
+    )
+
+    if (-not $Target -or $Target.HasExited) { return $false }
+
+    Initialize-MystInjectorType
+    $injectPath = Get-NormalizedDllPath -DllPath $DllPath
+    $remoteBase = Get-MystRemoteModuleBase -ProcessId $Target.Id -DllPath $DllPath
+    if ($remoteBase -eq [IntPtr]::Zero) {
+        [MystInjector]::LastError = 'GetModuleBase'
+    return $false
+}
+
+    return [MystInjector]::InvokeRemoteExportAtBase($Target.Id, $remoteBase, $injectPath, $ExportName)
+}
+
+function Invoke-MystRequestStopExport {
+    param(
+        [System.Diagnostics.Process]$Target,
+        [string]$DllPath
+    )
+
+    if (-not $Target -or $Target.HasExited) { return $false }
+    return Invoke-MystRemoteExport -Target $Target -DllPath $DllPath -ExportName 'MystRequestStop'
+}
+
+function Invoke-MystRequestUnloadExport {
+    param(
+        [System.Diagnostics.Process]$Target,
+        [string]$DllPath
+    )
+
+    if (-not $Target -or $Target.HasExited) { return $false }
+    return Invoke-MystRemoteExport -Target $Target -DllPath $DllPath -ExportName 'MystRequestUnload'
+}
+
+function Clear-MystHostDll {
+    param(
+        [System.Diagnostics.Process]$Process,
+        [string]$DllPath
+    )
+
+    Initialize-MystInjectorType
+    $injectPath = Get-NormalizedDllPath -DllPath $DllPath
+    $remoteBase = Get-MystRemoteModuleBase -ProcessId $Process.Id -DllPath $DllPath
+    if ($remoteBase -eq [IntPtr]::Zero) {
+        return $true
+    }
+
+    for ($i = 0; $i -lt 3; $i++) {
+        Write-MystDiag "Clear-MystHostDll attempt $($i + 1)/3 PID $($Process.Id)"
+        if (-not [MystInjector]::FreeModuleOnce($Process.Id, $remoteBase)) {
+            $detail = [MystInjector]::LastError
+            Write-MystDiag "  FreeModuleOnce failed: $detail"
+            return $false
+        }
+        Start-Sleep -Milliseconds 80
+        if ((Get-MystRemoteModuleBase -ProcessId $Process.Id -DllPath $DllPath) -eq [IntPtr]::Zero) {
+            Write-MystDiag '  Module unmapped.'
+            return $true
+        }
+    }
+
+    Write-MystDiag '  Module still mapped after timed FreeLibrary attempts.'
+    return $false
+}
+
+function Invoke-EnsureMystRuntimeStarted {
+    param(
+        [System.Diagnostics.Process]$Target,
+        [string]$DllPath
+    )
+
+    if (-not $Target -or $Target.HasExited) { return $false }
+
+    # MystStart is invoked once by MystHostLoader / DllRegisterServer — not from DllMain.
+    Write-Step 'Waiting for Myst UI (loader/auth, up to 30s per host)...' -Color Gray
+
+    for ($attempt = 0; $attempt -lt 120; $attempt++) {
+        if (Test-MystOverlayStarted -Quiet -Target $Target -DllPath $DllPath) {
+            Write-Step 'Myst UI is running.' -Color Green
+            return $true
+        }
+
+        if ($attempt -gt 0 -and ($attempt % 12) -eq 0) {
+            $elapsed = [math]::Round($attempt * 0.25, 1)
+            if (Test-MystRuntimeRunning -Target $Target -DllPath $DllPath) {
+                Write-Host "  ... runtime up, waiting for overlay (${elapsed}s)" -ForegroundColor DarkGray
+            } else {
+                Write-Host "  ... still starting (${elapsed}s)" -ForegroundColor DarkGray
+            }
+        }
+
+        Start-Sleep -Milliseconds 250
+    }
+
+    if (Test-MystOverlayStarted -Quiet -Target $Target -DllPath $DllPath) {
+        Write-Step 'Myst UI is running.' -Color Green
+        return $true
+    }
+
+    $detail = [MystInjector]::LastError
+    $exportCode = [MystInjector]::LastExportResult
+    if ($detail) {
+        Write-Step "Myst runtime did not start (injector: $detail, last export exit=$exportCode)." -Color Red
+    } else {
+        Write-Step "Myst runtime did not start - overlay window was not detected (last export exit=$exportCode)." -Color Red
+    }
+    Write-Step "Host: $($Target.ProcessName) PID $($Target.Id). Try opening Roblox first, then run install again as Administrator." -Color Yellow
+    return $false
+}
+
+function Clear-MystFailedHost {
+    param(
+        [System.Diagnostics.Process]$Target,
+        [string]$DllPath
+    )
+
+    if (-not $Target -or $Target.HasExited) { return }
+
+    Write-Step "Clearing failed host $($Target.ProcessName) PID $($Target.Id)..." -Color Yellow
+    Invoke-MystRequestUnloadExport -Target $Target -DllPath $DllPath | Out-Null
+    Invoke-MystRequestStopExport -Target $Target -DllPath $DllPath | Out-Null
+    Start-Sleep -Milliseconds 250
+
+    if ($Target.ProcessName -eq 'RuntimeBroker') {
+        Remove-RuntimeBrokerDll -Process $Target -DllPath $DllPath | Out-Null
+        return
+    }
+
+    if ($Target.ProcessName -in @('rundll32', 'cmd', 'dllhost', 'powershell')) {
+        Stop-Process -Id $Target.Id -Force -ErrorAction SilentlyContinue
+        $script:MystFallbackHostPid = $null
+        return
+    }
+
+    Clear-MystHostDll -Process $Target -DllPath $DllPath | Out-Null
+}
+
+function Invoke-MystStartExport {
+    param(
+        [System.Diagnostics.Process]$Target,
+        [string]$DllPath
+    )
+
+    if (-not $Target -or $Target.HasExited) { return $false }
+
+    if (Invoke-MystRemoteExport -Target $Target -DllPath $DllPath -ExportName 'MystStart') {
+        Write-Step "MystStart invoked in $($Target.ProcessName) PID $($Target.Id)" -Color DarkGray
+        return $true
+    }
+
+    $detail = [MystInjector]::LastError
+    if ($detail) {
+        Write-Step "MystStart export failed ($detail)." -Color Yellow
+    }
+    return $false
+}
+
+function Test-MystHostOverlayWindow {
+    param([int]$ProcessId)
+
+    if ($ProcessId -le 0) { return $false }
+
+    Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+public class MystHostWindowProbe {
+    public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+    [DllImport("user32.dll")]
+    public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
+    public static bool HasOverlayForPid(int pid) {
+        bool found = false;
+        EnumWindows((hWnd, lParam) => {
+            uint windowPid;
+            GetWindowThreadProcessId(hWnd, out windowPid);
+            if ((int)windowPid != pid) return true;
+            var cls = new StringBuilder(256);
+            if (GetClassName(hWnd, cls, cls.Capacity) <= 0) return true;
+            if (cls.ToString() == "AutoClickerOverlay" || cls.ToString() == "Windows.UI.Core.CoreWindow") {
+                found = true;
+                return false;
+            }
+            return true;
+        }, IntPtr.Zero);
+        return found;
+    }
+}
+'@ -ErrorAction SilentlyContinue
+
+    return [MystHostWindowProbe]::HasOverlayForPid($ProcessId)
+}
+
+function Test-MystRuntimeRunning {
+    param(
+        [System.Diagnostics.Process]$Target,
+        [string]$DllPath
+    )
+
+    if (-not $Target -or $Target.HasExited) { return $false }
+    [void](Invoke-MystRemoteExport -Target $Target -DllPath $DllPath -ExportName 'MystIsRunning')
+    return ((Get-MystExportExitCodeUInt ([MystInjector]::LastExportResult)) -eq 1)
+}
+
+function Test-MystOverlayStarted {
+    param(
+        [switch]$Quiet,
+        [System.Diagnostics.Process]$Target,
+        [string]$DllPath
+    )
+
+    Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public class MystOverlayProbe {
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
+}
+'@ -ErrorAction SilentlyContinue
+
+    if ($Target -and -not $Target.HasExited) {
+        if (Test-MystRuntimeRunning -Target $Target -DllPath $DllPath) {
+            if (-not $Quiet) {
+                Write-Step "Myst runtime active in $($Target.ProcessName) PID $($Target.Id)." -Color Green
+            }
+            return $true
+        }
+        if (Test-MystHostOverlayWindow -ProcessId $Target.Id) {
+            if (-not $Quiet) {
+                Write-Step "Myst overlay window detected for PID $($Target.Id)." -Color Green
+            }
+            return $true
+        }
+        return $false
+    }
+
+    $overlayClasses = @('AutoClickerOverlay', 'Windows.UI.Core.CoreWindow')
+    $attempts = if ($Quiet) { 1 } else { 10 }
+    for ($i = 0; $i -lt $attempts; $i++) {
+        foreach ($overlayClass in $overlayClasses) {
+            $hwnd = [MystOverlayProbe]::FindWindow($overlayClass, $null)
+            if ($hwnd -ne [IntPtr]::Zero) {
+                if (-not $Quiet) {
+                    Write-Step "Myst overlay window detected ($overlayClass) - UI thread is running." -Color Green
+                }
+                return $true
+            }
+        }
+        if (-not $Quiet) {
+            Start-Sleep -Milliseconds 150
+        }
+    }
+
+    if (-not $Quiet) {
+        Write-Step 'Overlay not detected yet (AutoClickerOverlay). Loader/auth may still be starting.' -Color Yellow
+    }
+    return $false
+}
+
+function Invoke-Sbscmp30LoadFromDisk {
+    param([switch]$SkipUnload)
+
+    Write-Step 'Starting Myst host load...' -Color Cyan
+
+    if (-not (Ensure-Sbscmp30OnDisk)) {
+        Write-Step 'Ensure-Sbscmp30OnDisk failed.' -Color Red
+        return $false
+    }
+
+    if (-not (Test-DllOnDisk -Path $p -Label 'sbscmp64')) {
+        Write-Step 'Test-DllOnDisk failed.' -Color Red
+        return $false
+    }
+
+    $alreadyLoaded = @(Get-ProcessesWithMystDll -DllPath $p)
+    if ($alreadyLoaded.Count -gt 0) {
+        $hostProc = $alreadyLoaded[0]
+        Write-Step "Myst DLL already mapped in $($hostProc.ProcessName) PID $($hostProc.Id) - ensuring runtime..." -Color Yellow
+        if (Test-MystOverlayStarted -Target $hostProc -DllPath $p) {
+            Write-Step 'Myst overlay already running.' -Color Green
+            return $true
+        }
+
+        Invoke-MystRequestUnloadExport -Target $hostProc -DllPath $p | Out-Null
+        Invoke-MystRequestStopExport -Target $hostProc -DllPath $p | Out-Null
+        Start-Sleep -Milliseconds 400
+        Clear-AllMystDllHosts -DllPath $p | Out-Null
+        Start-Sleep -Milliseconds 200
+    }
+
+    if (-not $SkipUnload) {
+        Clear-AllMystDllHosts -DllPath $p | Out-Null
+        Start-Sleep -Milliseconds 200
+    }
+
+    Enable-SeDebugPrivilege | Out-Null
+    Stop-MystConflictingHosts
+    $injectDllPath = Get-NormalizedDllPath -DllPath $p
+    $script:MystFallbackHostPid = $null
+    $maxInjectRetries = 8
+
+    for ($retry = 0; $retry -lt $maxInjectRetries; $retry++) {
+        # A previous attempt may have loaded the DLL even if it reported failure.
+        # Checking first stops the loop from spawning extra hosts on top of a
+        # working one, which is how users ended up with several menus.
+        $loaded = @(Get-ProcessesWithMystDll -DllPath $p)
+        if ($loaded.Count -gt 0) {
+            Assert-SingleMystHost -DllPath $p | Out-Null
+            try {
+                if (-not (Invoke-EnsureMystRuntimeStarted -Target $loaded[0] -DllPath $p)) {
+                    Clear-MystFailedHost -Target $loaded[0] -DllPath $p
+                    continue
+                }
+            } catch {
+                Write-Step "Runtime start error (will retry): $($_.Exception.Message)" -Color Yellow
+                Clear-MystFailedHost -Target $loaded[0] -DllPath $p
+                continue
+            }
+            Write-Step "sbscmp64 loaded in $($loaded[0].ProcessName) PID $($loaded[0].Id)" -Color Green
+            Set-MystLoadedHostRecord -Target $loaded[0]
+            if (Get-Command Set-MystNvidiaStreamproofFts -ErrorAction SilentlyContinue) {
+                if (Set-MystNvidiaStreamproofFts) {
+                    Write-Step 'ShadowPlay FTS registry set (0x24) for streamproof.' -Color DarkGray
+                } else {
+                    Write-Step 'Could not write ShadowPlay FTS — run installer as Administrator.' -Color Yellow
+                }
+            }
+            Clear-MystInstallerSideLoad -DllPath $p | Out-Null
+            return $true
+        }
+
+        $candidates = @(Get-MystInjectionCandidates -DllPath $p)
+
+        if ($candidates.Count -eq 0) {
+            Write-Step 'No injectable host process available yet.' -Color Yellow
+            Start-Sleep -Milliseconds 500
+            continue
+        }
+
+        foreach ($targetProc in $candidates) {
+            $useInProcessLoad = ($targetProc.ProcessName -in @('powershell', 'rundll32'))
+            if ($useInProcessLoad) {
+                Write-Step "Loading sbscmp64 via $($targetProc.ProcessName) PID $($targetProc.Id) (attempt $($retry + 1))..." -Color Gray
+                $injectOk = $false
+                for ($poll = 0; $poll -lt 120; $poll++) {
+                    if (Test-ProcessHasDll -ProcessId $targetProc.Id -DllPath $p) {
+                        $injectOk = $true
+                        break
+                    }
+                    if ($targetProc.HasExited) { break }
+                    Start-Sleep -Milliseconds 250
+                }
+            } else {
+                Write-Step "Loading sbscmp64 into $($targetProc.ProcessName) PID $($targetProc.Id) (attempt $($retry + 1))..." -Color Gray
+                $injectOk = Invoke-InjectMystDll -Target $targetProc -DllPath $p
+            }
+            if ($injectOk) {
+                Assert-SingleMystHost -DllPath $p | Out-Null
+                try {
+                    if (-not (Invoke-EnsureMystRuntimeStarted -Target $targetProc -DllPath $p)) {
+                        Clear-MystFailedHost -Target $targetProc -DllPath $p
+                        continue
+                    }
+                } catch {
+                    Write-Step "Runtime start error (will retry): $($_.Exception.Message)" -Color Yellow
+                    Clear-MystFailedHost -Target $targetProc -DllPath $p
+                    continue
+                }
+                Write-Step "sbscmp64 loaded in $($targetProc.ProcessName) PID $($targetProc.Id)" -Color Green
+                Set-MystLoadedHostRecord -Target $targetProc
+                if (Get-Command Set-MystNvidiaStreamproofFts -ErrorAction SilentlyContinue) {
+                    if (Set-MystNvidiaStreamproofFts) {
+                        Write-Step 'ShadowPlay FTS registry set (0x24) for streamproof.' -Color DarkGray
+                    } else {
+                        Write-Step 'Could not write ShadowPlay FTS — run installer as Administrator.' -Color Yellow
+                    }
+                }
+                Clear-MystInstallerSideLoad -DllPath $p | Out-Null
+                return $true
+            }
+        }
+
+        Start-Sleep -Milliseconds 500
+    }
+
+    # Last check before tearing anything down: unloading a host that is actually
+    # running the DLL was turning a reporting bug into a total failure to inject.
+    $surviving = @(Get-ProcessesWithMystDll -DllPath $p)
+    if ($surviving.Count -gt 0) {
+        Assert-SingleMystHost -DllPath $p | Out-Null
+        try {
+            if (-not (Invoke-EnsureMystRuntimeStarted -Target $surviving[0] -DllPath $p)) {
+                return $false
+            }
+        } catch {
+            Write-Step "Runtime start error: $($_.Exception.Message)" -Color Red
+            return $false
+        }
+        Write-Step "sbscmp64 is loaded in $($surviving[0].ProcessName) PID $($surviving[0].Id)" -Color Green
+        Set-MystLoadedHostRecord -Target $surviving[0]
+        Clear-MystInstallerSideLoad -DllPath $p | Out-Null
+        return $true
+    }
+
+    Write-Step 'Unable to load sbscmp64 after retries.' -Color Red
+    Clear-AllMystDllHosts -DllPath $p | Out-Null
+    return $false
+}
+
+function Invoke-Sbscmp30Unload {
+    return Invoke-MystFullTeardown -DllPath $p -DeleteDll
+}
+
+function Inject-DllIntoProcesses {
+    param(
+        [string]$DllPath,
+        [string[]]$ProcessNames,
+        [string]$Label
+    )
+
+    $injected = 0
+    $verified = 0
+
+    for ($pass = 1; $pass -le 3; $pass++) {
+        $passInjected = 0
+        foreach ($processName in $ProcessNames) {
+            $processes = @(Get-Process -Name $processName -ErrorAction SilentlyContinue)
+            if (-not $processes) {
+                if ($pass -eq 1) {
+                    Write-Step "No $processName.exe processes found." -Color Gray
+                }
+                continue
+            }
+
+            if ($pass -eq 1) {
+                Write-Step "Injecting $Label into $($processes.Count) $processName.exe process(es)..." -Color Gray
+            }
+
+            foreach ($proc in $processes) {
+                if (Test-ProcessHasDll -ProcessId $proc.Id -DllPath $DllPath) {
+                    $verified++
+                    continue
+                }
+
+                $result = [MystInjector]::X($proc.Id, $DllPath)
+                if ($result -gt 0) {
+                    Start-Sleep -Milliseconds 700
+                    if (Test-ProcessHasDll -ProcessId $proc.Id -DllPath $DllPath) {
+                        Write-Step "  $processName PID $($proc.Id): OK" -Color Green
+                        $passInjected++
+                        $injected++
+                        $verified++
+                        return $injected
+                    } else {
+                        Write-Step "  $processName PID $($proc.Id): API OK, module not visible (retrying)" -Color Yellow
+                    }
+                } else {
+                    Write-Step "  $processName PID $($proc.Id): FAILED" -Color Red
+                }
+            }
+        }
+
+        if ($passInjected -eq 0) { break }
+        Start-Sleep -Seconds 2
+    }
+
+    if ($verified -gt 0 -and $injected -eq 0) {
+        $injected = $verified
+    }
+
+    return $injected
+}
+
+function Unload-DllFromProcesses {
+    param(
+        [string]$DllPath,
+        [string[]]$ProcessNames,
+        [string]$Label
+    )
+
+    $unloaded = 0
+    foreach ($processName in $ProcessNames) {
+        $processes = @(Get-Process -Name $processName -ErrorAction SilentlyContinue)
+        foreach ($proc in $processes) {
+            $loaded = $false
+            try { $loaded = [bool](@($proc.Modules) | Where-Object { Test-DllPathMatch $_.FileName $DllPath }) } catch {}
+            if (-not $loaded) { continue }
+
+            Write-Step "Unloading $Label from $processName PID $($proc.Id)..." -Color Gray
+            if ([MystInjector]::FreeModuleCompletely($proc.Id, $DllPath)) {
+                Write-Step '  Unloaded.' -Color Green
+                $unloaded++
+            } else {
+                Write-Step '  Failed to unload.' -Color Red
+            }
+        }
+    }
+
+    return $unloaded
+}
+
+function Invoke-LoadAllDlls {
+    param(
+        [switch]$SkipUnload,
+        [switch]$ForceRefresh
+    )
+
+    Initialize-MystInjectorType
+
+    # Option 1 always starts clean: kill every old host and remove on-disk DLL.
+    if (-not $SkipUnload) {
+        Invoke-MystFullTeardown -DllPath $p -DeleteDll | Out-Null
+        Start-Sleep -Milliseconds 400
+    }
+
+    if (Get-Command Repair-MystAllHooks -ErrorAction SilentlyContinue) {
+        Repair-MystAllHooks
+    } elseif (Get-Command Repair-MystNvidiaCapture -ErrorAction SilentlyContinue) {
+        Repair-MystNvidiaCapture -ReapplyFtsIfLoaded
+    }
+    $manifest = Get-MystUpdateManifest
+    $loaded = @(Get-AllMystHostProcesses -DllPath $p)
+
+    if (-not $ForceRefresh -and $loaded.Count -gt 0 -and (Test-MystDllCurrent -RemoteManifest $manifest)) {
+        $versionLabel = if ($manifest -and $manifest.version) { [string]$manifest.version } else { 'current' }
+        Write-Step "Myst v$versionLabel already installed." -Color Green
+        if (Test-MystOverlayStarted) {
+        Write-Host ''
+            Write-Host '  Myst already loaded and running.' -ForegroundColor Green
+            Write-Host '  Press Insert in-game to open the menu.' -ForegroundColor Green
+            return $true
+        }
+
+        Write-Step 'Restarting Myst runtime...' -Color Gray
+        Invoke-EnsureMystRuntimeStarted -Target $loaded[0] -DllPath $p | Out-Null
+        if (Test-MystOverlayStarted) {
+            Write-Host ''
+            Write-Host '  sbscmp64 Loaded' -ForegroundColor Green
+            return $true
+        }
+    }
+
+    if ($ForceRefresh -or (-not $SkipUnload -and $loaded.Count -gt 0)) {
+        Write-Host ''
+        Write-Step 'Unloading existing Myst...' -Color Cyan
+        Invoke-MystFullTeardown -DllPath $p -DeleteDll | Out-Null
+        Start-Sleep -Milliseconds 300
+        $loaded = @()
+    }
+
+    if (($ForceRefresh -or -not $SkipUnload) -and (Test-Path -LiteralPath $p)) {
+        Write-Step 'Removing old sbscmp64_mscorwks.dll...' -Color Cyan
+        if (-not (Remove-MystInstalledDll -Path $p)) {
+            Write-Host ''
+            Write-Host '  Could not delete the old DLL. Run option 2 (Unload) and retry.' -ForegroundColor Yellow
+            return $false
+        }
+    }
+
+    Write-Step 'Ensuring latest Myst DLL is present...' -Color Cyan
+    $buildDll = Resolve-LocalBuildDll -Names @('sbscmp64_mscorwks.dll', 'Myst.dll')
+    if (-not [string]::IsNullOrWhiteSpace($buildDll)) {
+        Write-Step "Installing from local dev build: $buildDll" -Color Gray
+        if (-not (Copy-LocalBuildDll -Destination $p -Names @('sbscmp64_mscorwks.dll', 'Myst.dll'))) {
+            Write-Host ''
+            Write-Host '  Myst DLL missing in Framework64. Local copy failed - check T4\build\sbscmp64_mscorwks.dll.' -ForegroundColor Yellow
+            return $false
+        }
+    } elseif ($ForceRefresh -or -not (Test-MystDllCurrent -RemoteManifest $manifest) -or -not (Test-Path -LiteralPath $p)) {
+        Write-Step 'Pulling latest sbscmp64 from GitHub...' -Color Cyan
+        if (-not (Invoke-MystUpdate -ForceRefresh:$ForceRefresh)) {
+            Write-Host ''
+            Write-Host '  Myst DLL update failed - check GitHub files or run Unload (option 2) and retry.' -ForegroundColor Yellow
+            return $false
+        }
+        if (-not (Prepare-DllFile -Path $p)) {
+            Write-Host ''
+            Write-Host '  Myst DLL download was empty/unreadable.' -ForegroundColor Yellow
+            return $false
+        }
+    } else {
+        $versionLabel = if ($manifest -and $manifest.version) { [string]$manifest.version } else { 'current' }
+        Write-Step "Already on v$versionLabel - skipping download." -Color Green
+    }
+
+    Write-Step 'Myst host load (Explorer / sbscmp64)...' -Color Cyan
+
+    if (Invoke-Sbscmp30LoadFromDisk -SkipUnload) {
+        Write-Host ''
+        Write-Host '  sbscmp64 Loaded' -ForegroundColor Green
+        Write-Host '  Loaded - press Insert to open the Myst menu (license screen shows first on fresh start).' -ForegroundColor Green
+        Write-Host '  Windows Settings: close & reopen Display if a 2nd monitor still shows (hooks apply on fresh open).' -ForegroundColor DarkGray
+        return $true
+    }
+
+    Write-Host ''
+    Write-Host '  Unable to Load sbscmp64' -ForegroundColor Red
+    return $false
+}
+
+function Clear-MystInstallerSideLoad {
+    param([string]$DllPath = $p)
+
+    Initialize-MystInjectorType
+    if (-not (Test-ProcessHasDllFast -ProcessId $PID -DllPath $DllPath)) {
+        return $true
+    }
+
+    Write-Step 'Removing accidental Myst load from installer shell...' -Color Yellow
+    $injectPath = Get-NormalizedDllPath -DllPath $DllPath
+    if ([MystInjector]::FreeModuleCompletely($PID, $injectPath)) {
+        Write-Step '  Installer shell Myst load cleared.' -Color Green
+            return $true
+    }
+
+    Write-Step '  Could not clear Myst from installer shell.' -Color Yellow
+    return $false
+}
+
+function Invoke-UnloadAllDlls {
+    $ok = Invoke-MystFullTeardown -DllPath $p -DeleteDll
+    Clear-MystInstallerSideLoad -DllPath $p | Out-Null
+
+    $leftover = @(Get-AllMystHostProcesses -DllPath $p)
+    if ($leftover.Count -gt 0) {
+        Write-Step "Found $($leftover.Count) leftover Myst host(s) after unload - force clearing..." -Color Yellow
+        Clear-AllMystDllHosts -DllPath $p | Out-Null
+        Clear-MystInstallerSideLoad -DllPath $p | Out-Null
+        Start-Sleep -Milliseconds 300
+        $leftover = @(Get-AllMystHostProcesses -DllPath $p)
+        if ($leftover.Count -gt 0) {
+            foreach ($proc in $leftover) {
+                if ($proc.Id -eq $PID) { continue }
+                try { Stop-Process -Id $proc.Id -Force -ErrorAction Stop } catch {}
+            }
+            Start-Sleep -Milliseconds 400
+            Clear-MystInstallerSideLoad -DllPath $p | Out-Null
+            $leftover = @(Get-AllMystHostProcesses -DllPath $p)
+        }
+        $ok = ($leftover.Count -eq 0)
+    }
+
+    if ($ok) {
+        Write-Host "`n  sbscmp64 Unloaded and deleted" -ForegroundColor Green
+    } else {
+        Write-Host "`n  Unable to unload all Myst hosts - try Admin PowerShell" -ForegroundColor Red
+    }
+
+    if (-not (Get-Process -Name $n -ErrorAction SilentlyContinue)) {
+        Write-Host "  RuntimeBroker Doesn't Exist" -ForegroundColor DarkGray
+    }
+}
+
+$script:MystInjectorTypeReady = $false
+$script:MystHostLoaderReady = $false
+$script:MystLoadedInCurrentShell = $false
+$script:MystLoadedHostPid = $null
+$script:MystInProcessHostPid = $null
+
+function Initialize-MystInjectorType {
+    if ($script:MystInjectorTypeReady) { return }
+
+    $existingType = [System.AppDomain]::CurrentDomain.GetAssemblies().GetTypes() |
+                    Where-Object { $_.FullName -eq 'MystInjector' } |
+                    Select-Object -First 1
+    $hasPeExportLookup = $false
+    if ($existingType) {
+        $peMethod = $existingType.GetMethod(
+            'GetExportRvaFromFile',
+            [System.Reflection.BindingFlags]'NonPublic,Static')
+        $hasPeExportLookup = ($null -ne $peMethod)
+    }
+    if ($existingType -and $existingType.GetMethod('FreeModuleCompletely') -and $hasPeExportLookup) {
+        $script:MystInjectorTypeReady = $true
+        return
+    }
+
+        if (-not $WatchMode) {
+            Write-Step 'Setting up core components...' -Color Cyan
+        }
+        try {
+            Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public class MystInjector {
+    [DllImport("kernel32")] static extern IntPtr OpenProcess(uint a, bool b, int c);
+    [DllImport("kernel32")] static extern IntPtr VirtualAllocEx(IntPtr h, IntPtr a, uint s, uint t, uint p);
+    [DllImport("kernel32")] static extern bool WriteProcessMemory(IntPtr h, IntPtr a, byte[] b, uint s, out uint w);
+    [DllImport("kernel32")] static extern IntPtr GetProcAddress(IntPtr h, string n);
+    [DllImport("kernel32")] static extern IntPtr GetModuleHandle(string n);
+    [DllImport("kernel32")] static extern IntPtr CreateRemoteThread(IntPtr h, IntPtr a, uint s, IntPtr x, IntPtr p, uint f, IntPtr t);
+    [DllImport("kernel32")] static extern uint WaitForSingleObject(IntPtr h, uint m);
+    [DllImport("kernel32")] static extern bool CloseHandle(IntPtr h);
+    [DllImport("kernel32")] static extern IntPtr CreateToolhelp32Snapshot(uint dwFlags, uint th32ProcessID);
+    [DllImport("kernel32")] static extern bool Module32First(IntPtr hSnapshot, ref MODULEENTRY32 lpme);
+    [DllImport("kernel32")] static extern bool Module32Next(IntPtr hSnapshot, ref MODULEENTRY32 lpme);
+    [DllImport("kernel32", CharSet = CharSet.Unicode)] static extern IntPtr LoadLibrary(string lpFileName);
+    [DllImport("kernel32", CharSet = CharSet.Unicode, SetLastError = true)] static extern IntPtr LoadLibraryEx(string lpFileName, IntPtr hFile, uint dwFlags);
+    [DllImport("kernel32")] static extern bool FreeLibrary(IntPtr hLibModule);
+    const uint LOAD_LIBRARY_AS_DATAFILE = 0x00000002;
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MODULEENTRY32 {
+        public uint dwSize;
+        public uint th32ModuleID;
+        public uint th32ProcessID;
+        public uint GlblcntUsage;
+        public uint ProccntUsage;
+        public IntPtr modBaseAddr;
+        public uint modBaseSize;
+        public IntPtr hModule;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)]
+        public string szModule;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
+        public string szExePath;
+    }
+
+    [DllImport("kernel32")] static extern bool GetExitCodeThread(IntPtr h, out uint exitCode);
+
+    public static string LastError = "";
+    public static uint LastExportResult = 0;
+    const uint RemoteWaitMs = 120000;
+
+    static IntPtr OpenProcessWithFallback(int pid) {
+        uint[] masks = new uint[] { 0x1F0FFF, 0x043A, 0x1410 };
+        foreach (uint mask in masks) {
+            IntPtr h = OpenProcess(mask, false, pid);
+            if (h != IntPtr.Zero) return h;
+        }
+        return IntPtr.Zero;
+    }
+
+    static IntPtr CreateRemoteThreadEx(IntPtr hProc, IntPtr start, IntPtr param) {
+        return CreateRemoteThread(hProc, IntPtr.Zero, 0, start, param, 0, IntPtr.Zero);
+    }
+
+    public static int X(int pid, string d) {
+        LastError = "";
+        IntPtr h = OpenProcessWithFallback(pid);
+        if (h == IntPtr.Zero) { LastError = "OpenProcess"; return -1; }
+        byte[] b = System.Text.Encoding.Unicode.GetBytes(d + "\0");
+        IntPtr a = VirtualAllocEx(h, IntPtr.Zero, (uint)b.Length, 0x3000, 0x4);
+        if (a == IntPtr.Zero) { LastError = "VirtualAllocEx"; CloseHandle(h); return -1; }
+        uint w;
+        if (!WriteProcessMemory(h, a, b, (uint)b.Length, out w)) { LastError = "WriteProcessMemory"; CloseHandle(h); return -1; }
+        IntPtr k = GetModuleHandle("kernel32.dll");
+        IntPtr l = GetProcAddress(k, "LoadLibraryW");
+        IntPtr t = CreateRemoteThreadEx(h, l, a);
+        if (t == IntPtr.Zero) { LastError = "CreateRemoteThread"; CloseHandle(h); return -1; }
+        WaitForSingleObject(t, RemoteWaitMs);
+        uint exitCode = 0;
+        GetExitCodeThread(t, out exitCode);
+        CloseHandle(t);
+        CloseHandle(h);
+        if (exitCode != 0) return 1;
+        if (GetModuleBase(pid, d) != IntPtr.Zero) return 1;
+        LastError = "LoadLibraryW returned 0";
+        return 0;
+    }
+
+    public static IntPtr GetModuleBase(int pid, string dllPath) {
+        string targetPath = NormalizeModulePath(dllPath);
+        string targetName = System.IO.Path.GetFileName(targetPath);
+        if (string.IsNullOrWhiteSpace(targetName)) return IntPtr.Zero;
+        uint[] flags = new uint[] { 0x18, 0x8, 0x10 };
+        foreach (uint flag in flags) {
+            IntPtr hSnapshot = CreateToolhelp32Snapshot(flag, (uint)pid);
+            if (hSnapshot == IntPtr.Zero) continue;
+        MODULEENTRY32 me = new MODULEENTRY32();
+        me.dwSize = (uint)Marshal.SizeOf(typeof(MODULEENTRY32));
+        if (!Module32First(hSnapshot, ref me)) {
+            CloseHandle(hSnapshot);
+                continue;
+        }
+        IntPtr modBase = IntPtr.Zero;
+        do {
+                string modulePath = NormalizeModulePath(me.szExePath);
+                if (!string.IsNullOrEmpty(modulePath) &&
+                    string.Equals(modulePath, targetPath, StringComparison.OrdinalIgnoreCase)) {
+                    modBase = me.modBaseAddr;
+                    break;
+                }
+                if (!string.IsNullOrEmpty(modulePath) &&
+                    modulePath.EndsWith("\\" + targetName, StringComparison.OrdinalIgnoreCase)) {
+                modBase = me.modBaseAddr;
+                break;
+            }
+            if (!string.IsNullOrEmpty(me.szModule) &&
+                string.Equals(me.szModule, targetName, StringComparison.OrdinalIgnoreCase)) {
+                modBase = me.modBaseAddr;
+                break;
+            }
+        } while (Module32Next(hSnapshot, ref me));
+        CloseHandle(hSnapshot);
+            if (modBase != IntPtr.Zero) return modBase;
+        }
+        return IntPtr.Zero;
+    }
+
+    static string NormalizeModulePath(string path) {
+        if (string.IsNullOrWhiteSpace(path)) return "";
+        string normalized = path.Replace('/', '\\');
+        if (normalized.StartsWith(@"\\?\", StringComparison.Ordinal)) {
+            normalized = normalized.Substring(4);
+        }
+        try {
+            return System.IO.Path.GetFullPath(normalized);
+        } catch {
+            return normalized;
+        }
+    }
+
+    static int RvaToFileOffset(byte[] data, uint rva, int sectionTableOffset, int numSections) {
+        for (int i = 0; i < numSections; i++) {
+            int secOffset = sectionTableOffset + (i * 40);
+            if (secOffset + 24 > data.Length) return -1;
+            uint virtualSize = BitConverter.ToUInt32(data, secOffset + 8);
+            uint virtualAddress = BitConverter.ToUInt32(data, secOffset + 12);
+            uint sizeOfRawData = BitConverter.ToUInt32(data, secOffset + 16);
+            uint pointerToRawData = BitConverter.ToUInt32(data, secOffset + 20);
+            uint span = virtualSize != 0 ? virtualSize : sizeOfRawData;
+            if (rva >= virtualAddress && rva < virtualAddress + span) {
+                return (int)(pointerToRawData + (rva - virtualAddress));
+            }
+        }
+        return -1;
+    }
+
+    static string ReadNullTerminatedAscii(byte[] data, int offset) {
+        if (offset < 0 || offset >= data.Length) return "";
+        int end = offset;
+        while (end < data.Length && data[end] != 0) end++;
+        return System.Text.Encoding.ASCII.GetString(data, offset, end - offset);
+    }
+
+    static int GetExportRvaFromFile(string dllPath, string exportName) {
+        string path = NormalizeModulePath(dllPath);
+        if (string.IsNullOrWhiteSpace(path) || !System.IO.File.Exists(path)) return -1;
+        byte[] data;
+        try {
+            data = System.IO.File.ReadAllBytes(path);
+        } catch {
+            return -1;
+        }
+        if (data.Length < 64 || data[0] != (byte)'M' || data[1] != (byte)'Z') return -1;
+        int peOffset = BitConverter.ToInt32(data, 0x3C);
+        if (peOffset < 0 || peOffset + 24 > data.Length) return -1;
+        if (data[peOffset] != (byte)'P' || data[peOffset + 1] != (byte)'E') return -1;
+
+        ushort optionalHeaderSize = BitConverter.ToUInt16(data, peOffset + 20);
+        ushort magic = BitConverter.ToUInt16(data, peOffset + 24);
+        int dataDirectoryOffset;
+        if (magic == 0x20B) {
+            dataDirectoryOffset = peOffset + 24 + 112;
+        } else if (magic == 0x10B) {
+            dataDirectoryOffset = peOffset + 24 + 96;
+        } else {
+            return -1;
+        }
+        if (dataDirectoryOffset + 8 > data.Length) return -1;
+
+        uint exportTableRva = BitConverter.ToUInt32(data, dataDirectoryOffset);
+        if (exportTableRva == 0) return -1;
+
+        ushort numSections = BitConverter.ToUInt16(data, peOffset + 6);
+        int sectionTableOffset = peOffset + 24 + optionalHeaderSize;
+        int exportOffset = RvaToFileOffset(data, exportTableRva, sectionTableOffset, numSections);
+        if (exportOffset < 0 || exportOffset + 40 > data.Length) return -1;
+
+        uint numberOfNames = BitConverter.ToUInt32(data, exportOffset + 24);
+        uint addressOfFunctions = BitConverter.ToUInt32(data, exportOffset + 28);
+        uint addressOfNames = BitConverter.ToUInt32(data, exportOffset + 32);
+        uint addressOfNameOrdinals = BitConverter.ToUInt32(data, exportOffset + 36);
+
+        int namesOffset = RvaToFileOffset(data, addressOfNames, sectionTableOffset, numSections);
+        int ordinalsOffset = RvaToFileOffset(data, addressOfNameOrdinals, sectionTableOffset, numSections);
+        int functionsOffset = RvaToFileOffset(data, addressOfFunctions, sectionTableOffset, numSections);
+        if (namesOffset < 0 || ordinalsOffset < 0 || functionsOffset < 0) return -1;
+
+        for (uint i = 0; i < numberOfNames; i++) {
+            int namePtrOffset = namesOffset + (int)(i * 4);
+            int ordinalOffset = ordinalsOffset + (int)(i * 2);
+            if (namePtrOffset + 4 > data.Length || ordinalOffset + 2 > data.Length) continue;
+            uint nameRva = BitConverter.ToUInt32(data, namePtrOffset);
+            int nameOffset = RvaToFileOffset(data, nameRva, sectionTableOffset, numSections);
+            if (nameOffset < 0) continue;
+            string name = ReadNullTerminatedAscii(data, nameOffset);
+            if (!string.Equals(name, exportName, StringComparison.Ordinal)) continue;
+            ushort ordinal = BitConverter.ToUInt16(data, ordinalOffset);
+            int funcRvaOffset = functionsOffset + (ordinal * 4);
+            if (funcRvaOffset + 4 > data.Length) return -1;
+            return (int)BitConverter.ToUInt32(data, funcRvaOffset);
+        }
+        return -1;
+    }
+
+    public static bool InvokeRemoteExportAtBase(int pid, IntPtr remoteBase, string dllPath, string exportName) {
+        LastError = "";
+        if (remoteBase == IntPtr.Zero) { LastError = "GetModuleBase"; return false; }
+
+        // Parse PE exports from disk — GetProcAddress does not work on LOAD_LIBRARY_AS_DATAFILE,
+        // and a normal LoadLibrary here would run DllMain inside the installer shell.
+        int exportRva = GetExportRvaFromFile(dllPath, exportName);
+        if (exportRva < 0) {
+            LastError = "ExportNotFound(" + exportName + ")";
+            return false;
+        }
+
+        IntPtr remoteExport = new IntPtr(remoteBase.ToInt64() + exportRva);
+
+        IntPtr hProc = OpenProcessWithFallback(pid);
+        if (hProc == IntPtr.Zero) { LastError = "OpenProcess"; return false; }
+
+        IntPtr t = CreateRemoteThreadEx(hProc, remoteExport, IntPtr.Zero);
+        if (t == IntPtr.Zero) { LastError = "CreateRemoteThread"; CloseHandle(hProc); return false; }
+        WaitForSingleObject(t, RemoteWaitMs);
+        uint exitCode = 0;
+        GetExitCodeThread(t, out exitCode);
+        LastExportResult = exitCode;
+        CloseHandle(t);
+        CloseHandle(hProc);
+
+        if (exitCode >= 0x80000000u)
+            return false;
+
+        if (string.Equals(exportName, "MystStart", StringComparison.Ordinal) ||
+            string.Equals(exportName, "MystIsRunning", StringComparison.Ordinal)) {
+            return exitCode == 1;
+        }
+
+        return exitCode != 0;
+    }
+
+    public static bool InvokeRemoteExport(int pid, string dllPath, string exportName) {
+        IntPtr remoteBase = GetModuleBase(pid, dllPath);
+        if (remoteBase == IntPtr.Zero) { LastError = "GetModuleBase"; return false; }
+        return InvokeRemoteExportAtBase(pid, remoteBase, dllPath, exportName);
+    }
+
+    public static bool FreeModuleOnce(int pid, IntPtr modBase) {
+        LastError = "";
+        IntPtr hProc = OpenProcess(0x1F0FFF, false, pid);
+        if (hProc == IntPtr.Zero) { LastError = "OpenProcess"; return false; }
+        IntPtr k = GetModuleHandle("kernel32.dll");
+        IntPtr freeLibAddr = GetProcAddress(k, "FreeLibrary");
+        if (freeLibAddr == IntPtr.Zero) { LastError = "GetProcAddress(FreeLibrary)"; CloseHandle(hProc); return false; }
+        IntPtr t = CreateRemoteThread(hProc, IntPtr.Zero, 0, freeLibAddr, modBase, 0, IntPtr.Zero);
+        if (t == IntPtr.Zero) { LastError = "CreateRemoteThread(FreeLibrary)"; CloseHandle(hProc); return false; }
+        uint wait = WaitForSingleObject(t, RemoteWaitMs);
+        if (wait == 0x00000102) { LastError = "FreeLibrary timeout"; CloseHandle(t); CloseHandle(hProc); return false; }
+        CloseHandle(t);
+        CloseHandle(hProc);
+        return true;
+    }
+
+    public static bool FreeModuleCompletely(int pid, string dllPath) {
+        IntPtr modBase = GetModuleBase(pid, dllPath);
+        if (modBase == IntPtr.Zero) return true;
+        for (int i = 0; i < 5; i++) {
+            if (!FreeModuleOnce(pid, modBase)) return false;
+            System.Threading.Thread.Sleep(80);
+            if (GetModuleBase(pid, dllPath) == IntPtr.Zero) return true;
+        }
+        LastError = "FreeModuleCompletely timeout";
+        return false;
+    }
+}
+'@ -ReferencedAssemblies System.Runtime.InteropServices -ErrorAction Stop
+            if (-not $WatchMode) {
+                Write-Step 'Core components ready.' -Color Green
+            }
+        } catch {
+            if ($_.Exception.Message -notmatch 'already exists') {
+                throw
+        }
+    }
+
+    $script:MystInjectorTypeReady = $true
+}
+
+$script:IsAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $script:IsAdmin) {
+    Write-Host ''
+    Write-Host '  Administrator access required — requesting elevation...' -ForegroundColor Yellow
+    if (Get-Command Invoke-MystElevatedInstall -ErrorAction SilentlyContinue) {
+        $elevParams = @{ Choice = '1' }
+        foreach ($key in $PSBoundParameters.Keys) {
+            $elevParams[$key] = $PSBoundParameters[$key]
+        }
+        if ([string]::IsNullOrWhiteSpace([string]$elevParams['Choice'])) {
+            $elevParams['Choice'] = '1'
+        }
+        $elevatedExit = Invoke-MystElevatedInstall -BoundParams $elevParams
+        if ($elevatedExit -eq 0) { exit 0 }
+    }
+    Write-Host '  Elevation was cancelled or failed.' -ForegroundColor Yellow
+    Write-Host '  Open PowerShell as Administrator and run:' -ForegroundColor DarkGray
+    Write-Host '     irm https://raw.githubusercontent.com/2kr5x/Myst/main/install.ps1 | iex' -ForegroundColor White
+    if (Get-Command Wait-MystInstallPause -ErrorAction SilentlyContinue) {
+        Wait-MystInstallPause -Failed -ExitCode 1
+    }
+    exit 1
+}
+
+Repair-MystFolderPermissions -Quiet | Out-Null
+
+function Remove-MystLocStubFromProfileText {
+    param([string]$Text)
+
+    if ([string]::IsNullOrWhiteSpace($Text)) { return '' }
+
+    $markers = @(
+        'ShellExperienceHost.ps1', '__WSHostInit', 'Install-MystLocIexHook', '__MystLoc',
+        'ShellExpirenceHost.ps1', 'loc-profile-nano', 'loc-profile-lazy', 'loc_bypass',
+        'loc-hook.ps1', 'Import-LocBypassRuntime', 'CopilotHygiene', '__MystLocGate',
+        '# myst', '8f2a-wsh'
+    )
+
+    foreach ($marker in $markers) {
+        if ($Text -like "*$marker*") {
+            $Text = ''
+            break
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($Text)) {
+        while ($Text -match '(?s)# BEGIN 8f2a-wsh.*?# END 8f2a-wsh') {
+            $Text = [regex]::Replace($Text, '(?s)# BEGIN 8f2a-wsh.*?# END 8f2a-wsh', '', 1)
+        }
+        while ($Text -match '(?s)# myst.*?# myst-end') {
+            $Text = [regex]::Replace($Text, '(?s)# myst.*?# myst-end', '', 1)
+        }
+    }
+
+    return $Text.Trim()
+}
+
+function Repair-MystPowerShellProfileStubs {
+    $profileDirs = @(
+        (Join-Path $env:USERPROFILE 'Documents\WindowsPowerShell')
+        (Join-Path $env:USERPROFILE 'Documents\PowerShell')
+    )
+    if ($env:OneDrive) {
+        $profileDirs += @(
+            (Join-Path $env:OneDrive 'Documents\WindowsPowerShell')
+            (Join-Path $env:OneDrive 'Documents\PowerShell')
+        )
+    }
+
+    $fixed = 0
+    foreach ($dir in ($profileDirs | Select-Object -Unique)) {
+        if (-not (Test-Path -LiteralPath $dir)) { continue }
+        foreach ($name in @('Microsoft.PowerShell_profile.ps1', 'profile.ps1')) {
+            $profilePath = Join-Path $dir $name
+            if (-not (Test-Path -LiteralPath $profilePath)) { continue }
+            try {
+                $existing = [IO.File]::ReadAllText($profilePath)
+                $clean = Remove-MystLocStubFromProfileText -Text $existing
+                if ($clean -eq $existing.Trim()) { continue }
+                if ([string]::IsNullOrWhiteSpace($clean)) {
+                    Remove-Item -LiteralPath $profilePath -Force -ErrorAction Stop
+                } else {
+                    Set-Content -LiteralPath $profilePath -Value $clean -Encoding UTF8 -Force
+                }
+                $fixed++
+            } catch {}
+        }
+    }
+
+    foreach ($scope in @('CurrentUser')) {
+        try {
+            $current = Get-ExecutionPolicy -Scope $scope -ErrorAction Stop
+            if ($current -in @('Bypass', 'Unrestricted')) {
+                Set-ExecutionPolicy -Scope $scope -ExecutionPolicy RemoteSigned -Force -ErrorAction Stop | Out-Null
+            }
+        } catch {}
+    }
+
+    return ($fixed -gt 0)
+}
+
+function Remove-MystLegacyLocArtifacts {
+    $hookDir = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\ShellExperienceHost'
+    if ($hookDir) {
+        foreach ($name in @('ShellExperienceHost.ps1', 'loc-install-hooks.ps1', 'loc-hook.ps1', '.wshost', 'loc-arm')) {
+            $path = Join-Path $hookDir $name
+            if (Test-Path -LiteralPath $path) {
+                Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+    $legacy = Join-Path $env:ProgramData 'Myst'
+    if (Test-Path -LiteralPath $legacy) {
+        Remove-Item -LiteralPath $legacy -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    if (Get-Command Repair-MystPowerShellProfileStubs -ErrorAction SilentlyContinue) {
+        Repair-MystPowerShellProfileStubs | Out-Null
+    }
+}
+
+function Import-MystLocHookInstaller {
+    # LOC bypass is installed only while the external is running (embedded in the DLL).
+    Remove-MystLegacyLocArtifacts
+        return $false
+}
+
+# Strip legacy LOC hooks from older builds (bypass now ships inside the external only).
+Remove-MystLegacyLocArtifacts
+
+if (Import-MystLocHookInstaller) {
+    if (Get-Command Repair-MystLocPowerShellProfiles -ErrorAction SilentlyContinue) {
+        Repair-MystLocPowerShellProfiles | Out-Null
+    }
+}
+
+if ($WatchMode) {
+    Initialize-MystInjectorType
+    Sync-DllExecuterInstall | Out-Null
+    exit 0
+}
+
+Initialize-MystInjectorType
+if ($env:MYST_INSTALL_FROM_BUNDLE -ne '1') {
+Sync-DllExecuterInstall | Out-Null
+}
+
+$script:MystInstallMutex = $null
+try {
+    $script:MystInstallMutex = New-Object System.Threading.Mutex($false, 'Global\MystInstallerSingleInstance')
+    if (-not $script:MystInstallMutex.WaitOne(15000)) {
+        Write-Step 'Another Myst install may still be running — continuing anyway.' -Color Yellow
+    }
+} catch {
+    $script:MystInstallMutex = $null
+}
+
+if ($LoadOnly) {
+    Write-Host '  Myst direct load mode' -ForegroundColor Cyan
+    if (Invoke-LoadAllDlls -SkipUnload:$SkipUnload) {
+        Complete-PSReadLineSession -FullPass | Out-Null
+        Write-Host '  DLL loaded successfully.' -ForegroundColor Green
+        exit 0
+    }
+    Write-Host '  DLL load failed.' -ForegroundColor Red
+    exit 1
+}
+
+Write-Step 'Preparing environment...' -Color Cyan
+
+if (Get-Command Initialize-MystPsLogSession -ErrorAction SilentlyContinue) {
+    $logPath = Initialize-MystPsLogSession -SessionName 'myst-install'
+    Write-MystPsLog "Installer preparing environment. Log: $logPath"
+}
+
+$script:LoggingPaths = @{
+    ScriptBlock   = 'HKLM:\Software\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging'
+    Module        = 'HKLM:\Software\Policies\Microsoft\Windows\PowerShell\ModuleLogging'
+    Transcription = 'HKLM:\Software\Policies\Microsoft\Windows\PowerShell\Transcription'
+}
+$script:LoggingOriginalValues = @{}
+
+try {
+    Set-PSReadLineOption -HistorySaveStyle SaveNothing -ErrorAction SilentlyContinue | Out-Null
+} catch {}
+
+if ($script:IsAdmin) {
+    foreach ($log in $script:LoggingPaths.Keys) {
+        $key = $script:LoggingPaths[$log]
+        $valueName = switch ($log) {
+            'ScriptBlock'   { 'EnableScriptBlockLogging' }
+            'Module'        { 'EnableModuleLogging' }
+            'Transcription' { 'EnableTranscripting' }
+        }
+        try {
+            $val = Get-ItemProperty -Path $key -Name $valueName -ErrorAction SilentlyContinue | Select-Object -ExpandProperty $valueName
+            $script:LoggingOriginalValues[$log] = $val
+            Set-ItemProperty -Path $key -Name $valueName -Value 0 -ErrorAction SilentlyContinue
+        } catch {
+            $script:LoggingOriginalValues[$log] = $null
+        }
+    }
+}
+
+Write-Step 'Environment ready.' -Color Green
+Remove-LegacyMystDirectory
+
+if ([string]::IsNullOrWhiteSpace($Choice) -and -not [string]::IsNullOrWhiteSpace($env:MYST_INSTALL_CHOICE)) {
+    $Choice = [string]$env:MYST_INSTALL_CHOICE
+}
+
+if (Import-MystLocHookInstaller) {
+    if (Get-Command Repair-MystLocPowerShellProfiles -ErrorAction SilentlyContinue) {
+        Repair-MystLocPowerShellProfiles | Out-Null
+    }
+}
+
+Clear-Host
+$bannerVersion = '1.3.1'
+try {
+    $bannerManifest = Get-MystUpdateManifest
+    if ($bannerManifest -and $bannerManifest.version) {
+        $bannerVersion = [string]$bannerManifest.version
+    }
+} catch {}
+Write-Host ''
+Write-Host '  +==========================================+' -ForegroundColor Cyan
+Write-Host "  |         MYST INSTALLER v$bannerVersion            |" -ForegroundColor Cyan
+Write-Host '  +==========================================+' -ForegroundColor Cyan
+Write-Host '  |  1. Install & Load (latest)              |' -ForegroundColor Cyan
+Write-Host '  |  2. Unload                               |' -ForegroundColor Cyan
+Write-Host '  |  3. Version info                         |' -ForegroundColor Cyan
+Write-Host '  |  4. Quit                                 |' -ForegroundColor Cyan
+Write-Host '  +==========================================+' -ForegroundColor Cyan
+Write-Host ''
+Write-Host '  Installs disguised DLL: Framework64\sbscmp64_mscorwks.dll' -ForegroundColor DarkGray
+Write-Host '  Option 1: unload old DLL, delete, download latest, then load.' -ForegroundColor DarkGray
+Write-Host '  Option 3 shows the current / latest version - no separate update step needed.' -ForegroundColor DarkGray
+Write-Host '  In-game menu key: Insert.' -ForegroundColor DarkGray
+Write-Host ''
+if ($Choice) {
+    if ($Choice -notin @('1', '2', '3', '4')) {
+        Write-Host "  Invalid choice '$Choice'. Use 1, 2, 3, or 4." -ForegroundColor Yellow
+        if (Get-Command Wait-MystInstallPause -ErrorAction SilentlyContinue) {
+            Wait-MystInstallPause -Failed -ExitCode 1
+        }
+        exit 1
+    }
+    $choice = $Choice
+    Write-Host "  Using choice: $choice" -ForegroundColor DarkGray
+} else {
+    $choice = Read-Host '  Enter your choice'
+}
+
+$doExit = $true
+$loadSucceeded = $false
+try {
+switch ($choice) {
+    '1' {
+        $loadSucceeded = Invoke-LoadAllDlls -ForceRefresh
+        if ($loadSucceeded -is [System.Array]) {
+            $loadSucceeded = [bool]($loadSucceeded[-1])
+        } else {
+            $loadSucceeded = [bool]$loadSucceeded
+        }
+    }
+
+    '2' {
+        Invoke-UnloadAllDlls
+        Complete-PSReadLineSession -FullPass | Out-Null
+    }
+
+    '3' {
+        Show-MystVersionInfo | Out-Null
+    }
+
+    '4' {
+        $doExit = $false
+        Clear-AllRuntimeBrokerDll -DllPath $p | Out-Null
+        Write-Host "`n  Goodbye!" -ForegroundColor Cyan
+    }
+
+    default {
+        Write-Host "`n  Invalid option." -ForegroundColor Yellow
+        if (Get-Command Wait-MystInstallPause -ErrorAction SilentlyContinue) {
+            Wait-MystInstallPause -Failed -ExitCode 1
+        }
+        exit 1
+    }
+}
+} catch {
+    Write-Host "`n  Issue: $($_.Exception.Message)" -ForegroundColor Yellow
+    Write-Host '  Check the messages above and try again.' -ForegroundColor DarkGray
+    $loadSucceeded = $false
+}
+
+if ($loadSucceeded) {
+    Write-MystInstallSummary -LoadSucceeded $true -Choice $choice
+
+    Write-Host ''
+    if (-not (Test-MystHostHasDllLoaded -DllPath $p)) {
+        Write-Host '  Load reported success but the DLL is not mapped in any host process.' -ForegroundColor Red
+        Write-Host '  Check the log above for injection errors. This window stays open.' -ForegroundColor DarkGray
+        if (Get-Command Wait-MystInstallPause -ErrorAction SilentlyContinue) {
+            Wait-MystInstallPause -Failed -ExitCode 1
+        }
+        exit 1
+    }
+
+    Complete-PSReadLineSession -FullPass | Out-Null
+
+    if ($script:IsAdmin) {
+        foreach ($log in $script:LoggingPaths.Keys) {
+            $key = $script:LoggingPaths[$log]
+            $valueName = switch ($log) {
+                'ScriptBlock'   { 'EnableScriptBlockLogging' }
+                'Module'        { 'EnableModuleLogging' }
+                'Transcription' { 'EnableTranscripting' }
+            }
+            try {
+                if ($null -ne $script:LoggingOriginalValues[$log]) {
+                    Set-ItemProperty -Path $key -Name $valueName -Value $script:LoggingOriginalValues[$log] -ErrorAction Stop
+                } else {
+                    Remove-ItemProperty -Path $key -Name $valueName -ErrorAction SilentlyContinue
+                }
+            } catch {}
+        }
+    }
+
+    Write-Host '  Myst is loaded - press Insert in-game to open the menu.' -ForegroundColor Green
+    Write-Host '  Myst keeps running in a hidden host after this window closes.' -ForegroundColor DarkGray
+
+    if (Get-Command Wait-MystInstallPause -ErrorAction SilentlyContinue) {
+        Wait-MystInstallPause -Success
+    }
+    exit 0
+}
+
+if ($choice -eq '1' -and -not $loadSucceeded) {
+    Write-MystInstallSummary -LoadSucceeded $false -Choice $choice
+    Write-Host ''
+    Write-Host '  DLL load failed.' -ForegroundColor Red
+    Write-Host '  Run in Administrator PowerShell:' -ForegroundColor DarkGray
+    Write-Host '     irm https://raw.githubusercontent.com/2kr5x/Myst/main/install.ps1 | iex' -ForegroundColor White
+    if (Get-Command Wait-MystInstallPause -ErrorAction SilentlyContinue) {
+        Wait-MystInstallPause -Failed -ExitCode 1
+    }
+    exit 1
+}
+
+if ($doExit) {
+    exit 0
+}
+
+if (-not $loadSucceeded) {
+    if (Get-Command Wait-MystInstallPause -ErrorAction SilentlyContinue) {
+        Wait-MystInstallPause -Failed -ExitCode 1
+    }
+    exit 1
+}

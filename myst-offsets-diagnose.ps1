@@ -123,9 +123,9 @@ function Test-OffsetsHppContent {
     $checks = @(
         @{ Need = 'namespace offsets'; Label = 'namespace offsets' }
         @{ Need = 'roblox_version'; Label = 'roblox_version field' }
-        @{ Need = 'Player::ModelInstance'; Label = 'Player::ModelInstance offset' }
-        @{ Need = 'VisualEngine::'; Label = 'VisualEngine offsets' }
-        @{ Need = 'Humanoid::Health'; Label = 'Humanoid::Health offset' }
+        @{ Need = 'ModelInstance'; Label = 'ModelInstance offset' }
+        @{ Need = 'namespace VisualEngine'; Label = 'VisualEngine namespace' }
+        @{ Need = 'Health = '; Label = 'Humanoid Health offset' }
     )
 
     $ok = $true
@@ -251,7 +251,9 @@ $manifestResp = Test-OffsetUrl -Url "$script:BaseUrl/update.json" -Label 'update
 $manifest = $null
 if ($manifestResp) {
     try {
-        $manifest = $manifestResp.Content | ConvertFrom-Json
+        $raw = [string]$manifestResp.Content
+        if ($raw.Length -gt 0 -and ([int][char]$raw[0] -eq 0xFEFF)) { $raw = $raw.Substring(1) }
+        $manifest = $raw | ConvertFrom-Json
         $script:ExpectedRobloxVersion = [string]$manifest.roblox_version
         $script:ExpectedOffsetCount = [int]$manifest.offsets_count
         Write-OffDiag ("Myst version: {0}" -f $manifest.version) 'INFO'
@@ -307,7 +309,7 @@ foreach ($url in $hppUrls) {
     }
 }
 if (-not $hppOk) {
-    Write-OffDiag 'ALL offsets.hpp URLs failed — Auto offset mode CANNOT work (school WiFi / firewall / DNS block)' 'FAIL'
+    Write-OffDiag 'ALL offsets.hpp URL content checks failed (download may still work — see PASS download lines)' 'WARN'
 }
 
 $jsonOk = $false
@@ -320,7 +322,9 @@ foreach ($url in $jsonUrls) {
     }
 }
 if (-not $jsonOk) {
-    Write-OffDiag 'ALL offsets.json URLs failed — JSON fallback also blocked' 'FAIL'
+    Write-OffDiag 'ALL offsets.json URLs failed — JSON fallback blocked' 'FAIL'
+} elseif ($rbx -and $rbx.Version -and $script:ExpectedRobloxVersion -and $rbx.Version -ne $script:ExpectedRobloxVersion) {
+    Write-OffDiag ("CRITICAL: Roblox {0} != Myst offsets {1} — ESP/features CANNOT work until Myst is rebuilt with new offsets" -f $rbx.Version, $script:ExpectedRobloxVersion) 'FAIL'
 }
 
 Write-OffDiag '--- What Myst settings mean for your friend ---' 'INFO'

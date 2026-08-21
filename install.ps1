@@ -2252,8 +2252,8 @@ function Test-MystHostHasDllLoaded {
         Start-Sleep -Milliseconds 500
     } while ([DateTime]::UtcNow -lt $deadline)
 
-    return $false
-}
+        return $false
+    }
 
 function Get-ProcessesWithMystDll {
     param([string]$DllPath)
@@ -2978,7 +2978,7 @@ function Invoke-InjectMystDll {
         Start-Sleep -Milliseconds 150
     }
 
-    if ($loadResult -gt 0) {
+        if ($loadResult -gt 0) {
         Write-Step 'Injection reported success but module is not mapped in the target.' -Color Yellow
         return $false
     }
@@ -3063,8 +3063,8 @@ function Clear-MystHostDll {
     $injectPath = Get-NormalizedDllPath -DllPath $DllPath
     $remoteBase = Get-MystRemoteModuleBase -ProcessId $Process.Id -DllPath $DllPath
     if ($remoteBase -eq [IntPtr]::Zero) {
-        return $true
-    }
+                return $true
+            }
 
     for ($i = 0; $i -lt 3; $i++) {
         Write-MystDiag "Clear-MystHostDll attempt $($i + 1)/3 PID $($Process.Id)"
@@ -3076,7 +3076,7 @@ function Clear-MystHostDll {
         Start-Sleep -Milliseconds 80
         if ((Get-MystRemoteModuleBase -ProcessId $Process.Id -DllPath $DllPath) -eq [IntPtr]::Zero) {
             Write-MystDiag '  Module unmapped.'
-            return $true
+                return $true
         }
     }
 
@@ -3105,7 +3105,7 @@ function Invoke-EnsureMystRuntimeStarted {
             $elapsed = [math]::Round($attempt * 0.25, 1)
             if (Test-MystRuntimeRunning -Target $Target -DllPath $DllPath) {
                 Write-Host "  ... runtime up, waiting for overlay (${elapsed}s)" -ForegroundColor DarkGray
-            } else {
+        } else {
                 Write-Host "  ... still starting (${elapsed}s)" -ForegroundColor DarkGray
             }
         }
@@ -3120,9 +3120,9 @@ function Invoke-EnsureMystRuntimeStarted {
 
     $detail = [MystInjector]::LastError
     $exportCode = [MystInjector]::LastExportResult
-    if ($detail) {
+            if ($detail) {
         Write-Step "Myst runtime did not start (injector: $detail, last export exit=$exportCode)." -Color Red
-    } else {
+            } else {
         Write-Step "Myst runtime did not start - overlay window was not detected (last export exit=$exportCode)." -Color Red
     }
     Write-Step "Host: $($Target.ProcessName) PID $($Target.Id). Try opening Roblox first, then run install again as Administrator." -Color Yellow
@@ -3247,7 +3247,7 @@ public class MystOverlayProbe {
             if (-not $Quiet) {
                 Write-Step "Myst runtime active in $($Target.ProcessName) PID $($Target.Id)." -Color Green
             }
-            return $true
+        return $true
         }
         if (Test-MystHostOverlayWindow -ProcessId $Target.Id) {
             if (-not $Quiet) {
@@ -3345,7 +3345,7 @@ function Invoke-Sbscmp30LoadFromDisk {
             if (Get-Command Set-MystNvidiaStreamproofFts -ErrorAction SilentlyContinue) {
                 if (Set-MystNvidiaStreamproofFts) {
                     Write-Step 'ShadowPlay FTS registry set (0x24) for streamproof.' -Color DarkGray
-                } else {
+    } else {
                     Write-Step 'Could not write ShadowPlay FTS — run installer as Administrator.' -Color Yellow
                 }
             }

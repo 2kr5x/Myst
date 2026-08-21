@@ -522,11 +522,17 @@ namespace offsets {
          inline uintptr_t FindPartOnRayDescriptorRva = 0x685F840;
          inline uintptr_t FindPartOnRayWithIgnoreListDescriptorRva = 0x685F850;
          inline uintptr_t FindPartOnRayWithWhitelistDescriptorRva = 0x685F860;
+         inline uintptr_t RaycastBoundDesc = 0x82012A0;
+         inline uintptr_t RaycastBoundFn = 0x80;
          inline uintptr_t RaycastBoundFunctionOffset = 0x80;
          inline uintptr_t RaycastCompleteObjectLocatorRva = 0x709CDD8;
          inline uintptr_t RaycastDescriptorRva = 0x82012A0;
          inline uintptr_t RaycastDescriptorVtableRva = 0x6170040;
          inline uintptr_t RaycastTypeDescriptorRva = 0x7CADAE0;
+    }
+
+    namespace Functions {
+         inline uintptr_t Raycast = 0x0;
     }
 
 }

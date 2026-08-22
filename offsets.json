@@ -3,8 +3,8 @@
     "dumper": "valkz-dumper 1.0",
     "author": "Valkz (JustValkz)",
     "github": "https://github.com/2kr5x/Myst",
-    "roblox_version": "version-ce0bcd0fbd484804",
-    "total_offsets": 282
+    "roblox_version": "version-ddf602d9cfe44005",
+    "total_offsets": 286
   },
   "offsets": {
     "Atmosphere": {
@@ -108,7 +108,7 @@
       "NameDisplayDistance": 432,
       "NameOcclusion": 436,
       "RequiresNeck": 477,
-      "RigType": 61,
+      "RigType": 448,
       "SeatPart": 264,
       "Sit": 478,
       "TargetPoint": 332,
@@ -207,7 +207,7 @@
       "NameDisplayDistance": 932,
       "Team": 728,
       "TeamColor": 944,
-      "UserId": 208
+      "UserId": 768
     },
     "Players": {
       "LocalPlayer": 304
@@ -265,6 +265,12 @@
       "Scale": 196,
       "TextureId": 296
     },
+    "TaskScheduler": {
+      "JobEnd": 208,
+      "JobName": 2272,
+      "JobStart": 200,
+      "Pointer": 139067104
+    },
     "Team": {
       "TeamColor": 184
     },
@@ -290,7 +296,7 @@
       "Text": 3592,
       "TextColor3": 4392,
       "TextDirection": 4032,
-      "TextScaled": 4118,
+      "TextScaled": 2501,
       "TextSize": 4436,
       "TextStrokeColor3": 4404,
       "TextStrokeTransparency": 4440,

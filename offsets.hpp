@@ -1,6 +1,6 @@
 /*
  * Auto-converted from valkz-dumper (no imtheo)
- * Roblox Version: version-ce0bcd0fbd484804
+ * Roblox Version: version-ddf602d9cfe44005
  */
 
 #pragma once
@@ -8,7 +8,7 @@
 
 // clang-format off
 namespace offsets {
-    inline char roblox_version[64] = "version-ce0bcd0fbd484804";
+    inline char roblox_version[64] = "version-ddf602d9cfe44005";
 
     namespace Atmosphere {
          inline uintptr_t Color = 0xB8;
@@ -160,7 +160,7 @@ namespace offsets {
          inline uintptr_t NameOcclusion = 0x1B4;
          inline uintptr_t PlatformStand = 0x1DC;
          inline uintptr_t RequiresNeck = 0x1DD;
-         inline uintptr_t RigType = 0x3D;
+         inline uintptr_t RigType = 0x1C0;
          inline uintptr_t SeatPart = 0x108;
          inline uintptr_t Sit = 0x1DE;
          inline uintptr_t TargetPoint = 0x14C;
@@ -288,7 +288,7 @@ namespace offsets {
          inline uintptr_t NameDisplayDistance = 0x3A4;
          inline uintptr_t Team = 0x2D8;
          inline uintptr_t TeamColor = 0x3B0;
-         inline uintptr_t UserId = 0xD0;
+         inline uintptr_t UserId = 0x300;
     }
 
     namespace Players {
@@ -399,9 +399,9 @@ namespace offsets {
 
     namespace TaskScheduler {
          inline uintptr_t JobEnd = 0xD0;
-         inline uintptr_t JobName = 0x18;
+         inline uintptr_t JobName = 0x8E0;
          inline uintptr_t JobStart = 0xC8;
-         inline uintptr_t Pointer = 0x88B64C8;
+         inline uintptr_t Pointer = 0x84A58E0;
     }
 
     namespace Team {
@@ -437,7 +437,7 @@ namespace offsets {
          inline uintptr_t Text = 0xE08;
          inline uintptr_t TextColor3 = 0x1128;
          inline uintptr_t TextDirection = 0xFC0;
-         inline uintptr_t TextScaled = 0x1016;
+         inline uintptr_t TextScaled = 0x9C5;
          inline uintptr_t TextSize = 0x1154;
          inline uintptr_t TextStrokeColor3 = 0x1134;
          inline uintptr_t TextStrokeTransparency = 0x1158;

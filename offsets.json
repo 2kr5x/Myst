@@ -2,9 +2,9 @@
   "metadata": {
     "dumper": "valkz-dumper 1.0",
     "author": "Valkz (JustValkz)",
-    "github": "https://github.com/2kr5x/Myst",
+    "github": "https://github.com/JustValkz/Myst",
     "roblox_version": "version-ddf602d9cfe44005",
-    "total_offsets": 286
+    "total_offsets": 284
   },
   "offsets": {
     "Atmosphere": {
@@ -52,14 +52,25 @@
       "CreatorId": 376,
       "GameId": 384,
       "GameLoaded": 1392,
+      "GameLoaded": 1392,
       "JobId": 280,
       "PlaceId": 392,
       "ServerIP": 1368,
       "Workspace": 344
     },
+    "ExtraSpace": {
+      "IsCoreScript": 360,
+      "ScriptContextToResume": 2024
+    },
     "FakeDataModel": {
       "Pointer": 146250584,
       "RealDataModel": 472
+    },
+    "Functions": {
+      "Raycast": 38800032
+    },
+    "GarbageCollector": {
+      "L_global": 40
     },
     "GuiBase2D": {
       "AbsolutePosition": 264,
@@ -184,10 +195,6 @@
       "Snow": 30,
       "WoodPlanks": 21
     },
-    "MeshPart": {
-      "MeshId": 776,
-      "TextureId": 824
-    },
     "ModuleScript": {
       "Bytecode": 312,
       "Hash": 208
@@ -207,7 +214,7 @@
       "NameDisplayDistance": 932,
       "Team": 728,
       "TeamColor": 944,
-      "UserId": 768
+      "UserId": 208
     },
     "Players": {
       "LocalPlayer": 304
@@ -229,6 +236,11 @@
       "CanQuery": 32,
       "CanTouch": 16
     },
+    "Properties": {
+      "ClassDescriptor": 24,
+      "ClassName": 8,
+      "Properties": 120
+    },
     "ProximityPrompt": {
       "ActionText": 176,
       "Enabled": 310,
@@ -244,6 +256,10 @@
     },
     "Seat": {
       "Occupant": 528
+    },
+    "SignalConnection": {
+      "Enabled": 32,
+      "Next": 16
     },
     "Sky": {
       "MoonAngularSize": 580,
@@ -264,12 +280,6 @@
       "Offset": 184,
       "Scale": 196,
       "TextureId": 296
-    },
-    "TaskScheduler": {
-      "JobEnd": 208,
-      "JobName": 2272,
-      "JobStart": 200,
-      "Pointer": 139067104
     },
     "Team": {
       "TeamColor": 184
@@ -296,7 +306,7 @@
       "Text": 3592,
       "TextColor3": 4392,
       "TextDirection": 4032,
-      "TextScaled": 2501,
+      "TextScaled": 3569,
       "TextSize": 4436,
       "TextStrokeColor3": 4404,
       "TextStrokeTransparency": 4440,
@@ -316,7 +326,7 @@
       "Text": 2952,
       "TextColor3": 3752,
       "TextDirection": 3392,
-      "TextScaled": 3478,
+      "TextScaled": 2929,
       "TextSize": 3796,
       "TextStrokeColor3": 3764,
       "TextStrokeTransparency": 3800,
@@ -366,14 +376,8 @@
       "WorldSteps": 1800
     },
     "WorldRoot": {
-      "FindPartOnRayDescriptorRva": 109443136,
-      "FindPartOnRayWithIgnoreListDescriptorRva": 109443152,
-      "FindPartOnRayWithWhitelistDescriptorRva": 109443168,
-      "RaycastBoundFunctionOffset": 128,
-      "RaycastCompleteObjectLocatorRva": 118083032,
-      "RaycastDescriptorRva": 136319648,
-      "RaycastDescriptorVtableRva": 102170688,
-      "RaycastTypeDescriptorRva": 130734816
+      "RaycastBoundDesc": 136319648,
+      "RaycastBoundFn": 128
     }
   }
 }

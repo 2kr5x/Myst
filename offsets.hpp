@@ -10,15 +10,6 @@
 namespace offsets {
     inline char roblox_version[64] = "version-ddf602d9cfe44005";
 
-    namespace Atmosphere {
-         inline uintptr_t Color = 0xB8;
-         inline uintptr_t Decay = 0xC4;
-         inline uintptr_t Density = 0xD0;
-         inline uintptr_t Glare = 0xD4;
-         inline uintptr_t Haze = 0xD8;
-         inline uintptr_t Offset = 0xDC;
-    }
-
     namespace BasePart {
          inline uintptr_t CastShadow = 0x135;
          inline uintptr_t Color3 = 0x1A8;
@@ -85,6 +76,11 @@ namespace offsets {
          inline uintptr_t NearIntensity = 0xC4;
     }
 
+    namespace ExtraSpace {
+         inline uintptr_t IsCoreScript = 0x168;
+         inline uintptr_t ScriptContextToResume = 0x7E8;
+    }
+
     namespace FakeDataModel {
          inline uintptr_t Pointer = 0x8B79B58;
          inline uintptr_t RealDataModel = 0x1D8;
@@ -106,6 +102,14 @@ namespace offsets {
          inline uintptr_t RenderQueueId = 0x10;
          inline uintptr_t TechniqueArrayPtr = 0x70;
          inline uintptr_t VTableRva = 0x5F381C8;
+    }
+
+    namespace Functions {
+         inline uintptr_t Raycast = 0x2500AA0;
+    }
+
+    namespace GarbageCollector {
+         inline uintptr_t L_global = 0x28;
     }
 
     namespace GuiBase2D {
@@ -288,7 +292,7 @@ namespace offsets {
          inline uintptr_t NameDisplayDistance = 0x3A4;
          inline uintptr_t Team = 0x2D8;
          inline uintptr_t TeamColor = 0x3B0;
-         inline uintptr_t UserId = 0x300;
+         inline uintptr_t UserId = 0xD0;
     }
 
     namespace Players {
@@ -324,6 +328,12 @@ namespace offsets {
     namespace PrimitiveRecord {
          inline uintptr_t Stride = 48;
          inline uintptr_t Translation = 36;
+    }
+
+    namespace Properties {
+         inline uintptr_t ClassDescriptor = 0x18;
+         inline uintptr_t ClassName = 0x8;
+         inline uintptr_t Properties = 0x78;
     }
 
     namespace ProximityPrompt {
@@ -363,6 +373,11 @@ namespace offsets {
 
     namespace Seat {
          inline uintptr_t Occupant = 0x210;
+    }
+
+    namespace SignalConnection {
+         inline uintptr_t Enabled = 0x20;
+         inline uintptr_t Next = 0x10;
     }
 
     namespace Sky {
@@ -437,7 +452,7 @@ namespace offsets {
          inline uintptr_t Text = 0xE08;
          inline uintptr_t TextColor3 = 0x1128;
          inline uintptr_t TextDirection = 0xFC0;
-         inline uintptr_t TextScaled = 0x9C5;
+         inline uintptr_t TextScaled = 0xDF1;
          inline uintptr_t TextSize = 0x1154;
          inline uintptr_t TextStrokeColor3 = 0x1134;
          inline uintptr_t TextStrokeTransparency = 0x1158;
@@ -458,7 +473,7 @@ namespace offsets {
          inline uintptr_t Text = 0xB88;
          inline uintptr_t TextColor3 = 0xEA8;
          inline uintptr_t TextDirection = 0xD40;
-         inline uintptr_t TextScaled = 0xD96;
+         inline uintptr_t TextScaled = 0xB71;
          inline uintptr_t TextSize = 0xED4;
          inline uintptr_t TextStrokeColor3 = 0xEB4;
          inline uintptr_t TextStrokeTransparency = 0xED8;
@@ -529,10 +544,6 @@ namespace offsets {
          inline uintptr_t RaycastDescriptorRva = 0x82012A0;
          inline uintptr_t RaycastDescriptorVtableRva = 0x6170040;
          inline uintptr_t RaycastTypeDescriptorRva = 0x7CADAE0;
-    }
-
-    namespace Functions {
-         inline uintptr_t Raycast = 0x0;
     }
 
 }

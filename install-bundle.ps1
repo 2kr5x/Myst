@@ -868,14 +868,25 @@ function Repair-MystNvidiaRegistry {
     Set-ItemProperty -LiteralPath $cursorPath -Name 'CursorEnabled' -Value 1 -Type DWord -Force
     Set-ItemProperty -LiteralPath $cursorPath -Name 'DVRCursorEnabled' -Value 1 -Type DWord -Force
 
-    # The NVIDIA App has no cursor-in-recording toggle. The Windows-level fix
-    # NVIDIA actually honors is pointer trails: at 70 the trail stacks up
-    # invisibly behind the pointer but the cursor itself renders into clips.
+    # Legacy Myst builds wrote MouseTrails=70/1 which tints ShadowPlay green.
+    # Cursor capture uses NVSPCAPS DWORDs only — trails must stay off.
     $mousePath = 'HKCU:\Control Panel\Mouse'
-    if (-not (Test-Path -LiteralPath $mousePath)) {
-        New-Item -Path $mousePath -Force | Out-Null
+    if (Test-Path -LiteralPath $mousePath) {
+        Remove-ItemProperty -LiteralPath $mousePath -Name 'MouseTrails' -ErrorAction SilentlyContinue
     }
-    Set-ItemProperty -LiteralPath $mousePath -Name 'MouseTrails' -Value '1' -Force
+    try {
+        Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class MystDisableMouseTrails {
+    [DllImport("user32.dll", SetLastError=true)]
+    public static extern bool SystemParametersInfo(uint uiAction, uint uiParam, IntPtr pvParam, uint fWinIni);
+}
+'@ -ErrorAction Stop | Out-Null
+    } catch {}
+    try {
+        [void][MystDisableMouseTrails]::SystemParametersInfo(93, 0, [IntPtr]::Zero, 2)
+    } catch {}
 
     # Remove the broken v3.533 guess keys (wrong hive + wrong names).
     $brokenPath = 'HKLM:\SOFTWARE\NVIDIA Corporation\Global\NvContainer\ShadowPlay'

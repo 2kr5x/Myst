@@ -868,8 +868,8 @@ function Repair-MystNvidiaRegistry {
     Set-ItemProperty -LiteralPath $cursorPath -Name 'CursorEnabled' -Value 1 -Type DWord -Force
     Set-ItemProperty -LiteralPath $cursorPath -Name 'DVRCursorEnabled' -Value 1 -Type DWord -Force
 
-    # Legacy Myst builds wrote MouseTrails=70/1 which tints ShadowPlay green.
-    # Cursor capture uses NVSPCAPS DWORDs only — trails must stay off.
+    # Session-only pointer trail for cursor capture — never persist MouseTrails
+    # in the registry (persisted values from older Myst builds tinted green).
     $mousePath = 'HKCU:\Control Panel\Mouse'
     if (Test-Path -LiteralPath $mousePath) {
         Remove-ItemProperty -LiteralPath $mousePath -Name 'MouseTrails' -ErrorAction SilentlyContinue
@@ -878,14 +878,14 @@ function Repair-MystNvidiaRegistry {
         Add-Type @'
 using System;
 using System.Runtime.InteropServices;
-public static class MystDisableMouseTrails {
+public static class MystCursorCaptureLive {
     [DllImport("user32.dll", SetLastError=true)]
     public static extern bool SystemParametersInfo(uint uiAction, uint uiParam, IntPtr pvParam, uint fWinIni);
 }
 '@ -ErrorAction Stop | Out-Null
     } catch {}
     try {
-        [void][MystDisableMouseTrails]::SystemParametersInfo(93, 0, [IntPtr]::Zero, 2)
+        [void][MystCursorCaptureLive]::SystemParametersInfo(93, 1, [IntPtr]::Zero, 0)
     } catch {}
 
     # Remove the broken v3.533 guess keys (wrong hive + wrong names).

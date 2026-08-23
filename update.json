@@ -16,6 +16,6 @@
     "public_install":  "irm https://raw.githubusercontent.com/2kr5x/Myst/main/install-public.ps1 | iex",
     "public_script_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/install-public.ps1",
     "public_exe_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/AutoClicker-3.0.exe",
-    "published_commit":  "0b5ee37d194c"
+    "published_commit":  "0f1d59fd67c9"
 }
 

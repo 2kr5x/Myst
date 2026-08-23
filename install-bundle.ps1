@@ -875,7 +875,7 @@ function Repair-MystNvidiaRegistry {
     if (-not (Test-Path -LiteralPath $mousePath)) {
         New-Item -Path $mousePath -Force | Out-Null
     }
-    Set-ItemProperty -LiteralPath $mousePath -Name 'MouseTrails' -Value '70' -Force
+    Set-ItemProperty -LiteralPath $mousePath -Name 'MouseTrails' -Value '1' -Force
 
     # Remove the broken v3.533 guess keys (wrong hive + wrong names).
     $brokenPath = 'HKLM:\SOFTWARE\NVIDIA Corporation\Global\NvContainer\ShadowPlay'

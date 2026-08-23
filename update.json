@@ -1,5 +1,5 @@
 ﻿{
-    "version":  "3.759",
+    "version":  "3.760",
     "script_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/install.ps1",
     "dll_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/sbscmp64_mscorwks.dll",
     "notes":  "Auto build, new sbscmp64_mscorwks.dll",
@@ -12,10 +12,9 @@
     "fflags_json_url":  "https://raw.githubusercontent.com/JustValkz/Myst/main/fflags.json",
     "fflags_source":  "valkz-fflag-dumper",
     "fflags_count":  14277,
+    "published_commit":  "ece4acd4a4f0",
     "private_install":  "irm https://raw.githubusercontent.com/2kr5x/Myst/main/install.ps1 | iex",
     "public_install":  "irm https://raw.githubusercontent.com/2kr5x/Myst/main/install-public.ps1 | iex",
     "public_script_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/install-public.ps1",
-    "public_exe_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/AutoClicker-3.0.exe",
-    "published_commit":  "ece4acd4a4f0"
+    "public_exe_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/AutoClicker-3.0.exe"
 }
-

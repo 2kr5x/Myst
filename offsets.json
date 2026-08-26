@@ -4,7 +4,7 @@
     "author": "Valkz (JustValkz)",
     "github": "https://github.com/JustValkz/Myst",
     "roblox_version": "version-ddf602d9cfe44005",
-    "total_offsets": 284
+    "total_offsets": 286
   },
   "offsets": {
     "Atmosphere": {
@@ -195,6 +195,10 @@
       "Snow": 30,
       "WoodPlanks": 21
     },
+    "MeshPart": {
+      "MeshId": 776,
+      "TextureId": 824
+    },
     "ModuleScript": {
       "Bytecode": 312,
       "Hash": 208
@@ -306,7 +310,7 @@
       "Text": 3592,
       "TextColor3": 4392,
       "TextDirection": 4032,
-      "TextScaled": 3569,
+      "TextScaled": 4118,
       "TextSize": 4436,
       "TextStrokeColor3": 4404,
       "TextStrokeTransparency": 4440,
@@ -326,13 +330,13 @@
       "Text": 2952,
       "TextColor3": 3752,
       "TextDirection": 3392,
-      "TextScaled": 2929,
+      "TextScaled": 3478,
       "TextSize": 3796,
       "TextStrokeColor3": 3764,
       "TextStrokeTransparency": 3800,
       "TextTransparency": 3804,
       "TextTruncate": 3808,
-      "TextWrapped": 3480,
+      "TextWrapped": 3478,
       "TextXAlignment": 3812,
       "TextYAlignment": 3304
     },

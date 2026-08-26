@@ -10,17 +10,6 @@
 namespace offsets {
     inline char roblox_version[64] = "version-ddf602d9cfe44005";
 
-    namespace BasePart {
-         inline uintptr_t CastShadow = 0x135;
-         inline uintptr_t Color3 = 0x1A8;
-         inline uintptr_t Locked = 0x136;
-         inline uintptr_t Massless = 0x137;
-         inline uintptr_t Primitive = 0x188;
-         inline uintptr_t Reflectance = 0x10C;
-         inline uintptr_t Shape = 0x1B9;
-         inline uintptr_t Transparency = 0x130;
-    }
-
     namespace BloomEffect {
          inline uintptr_t Enabled = 0xB0;
          inline uintptr_t Intensity = 0xB8;
@@ -351,26 +340,6 @@ namespace offsets {
          inline uintptr_t SkyboxValid = 0x28D;
     }
 
-    namespace RenderQueue {
-         inline std::uint32_t AlwaysOnTop = 13u;
-         inline std::uint32_t AlwaysOnTopAdorns = 14u;
-         inline std::uint32_t Decals = 2u;
-         inline std::uint32_t Glass = 8u;
-         inline std::uint32_t GlassTint = 7u;
-         inline std::uint32_t OnTopReadOnlyDepth = 12u;
-         inline std::uint32_t OnTopWithDepth = 11u;
-         inline std::uint32_t Opaque = 0u;
-         inline std::uint32_t OpaqueAdorns = 4u;
-         inline std::uint32_t OpaqueCasters = 3u;
-         inline std::uint32_t OpaqueWithAlpha = 5u;
-         inline std::uint32_t Screen = 15u;
-         inline std::uint32_t ScreenOnTopOfBlur = 16u;
-         inline std::uint32_t Terrain = 1u;
-         inline std::uint32_t Transparent = 9u;
-         inline std::uint32_t TransparentCasters = 10u;
-         inline std::uint32_t Water = 6u;
-    }
-
     namespace Seat {
          inline uintptr_t Occupant = 0x210;
     }
@@ -452,7 +421,7 @@ namespace offsets {
          inline uintptr_t Text = 0xE08;
          inline uintptr_t TextColor3 = 0x1128;
          inline uintptr_t TextDirection = 0xFC0;
-         inline uintptr_t TextScaled = 0xDF1;
+         inline uintptr_t TextScaled = 0x1016;
          inline uintptr_t TextSize = 0x1154;
          inline uintptr_t TextStrokeColor3 = 0x1134;
          inline uintptr_t TextStrokeTransparency = 0x1158;
@@ -473,13 +442,13 @@ namespace offsets {
          inline uintptr_t Text = 0xB88;
          inline uintptr_t TextColor3 = 0xEA8;
          inline uintptr_t TextDirection = 0xD40;
-         inline uintptr_t TextScaled = 0xB71;
+         inline uintptr_t TextScaled = 0xD96;
          inline uintptr_t TextSize = 0xED4;
          inline uintptr_t TextStrokeColor3 = 0xEB4;
          inline uintptr_t TextStrokeTransparency = 0xED8;
          inline uintptr_t TextTransparency = 0xEDC;
          inline uintptr_t TextTruncate = 0xEE0;
-         inline uintptr_t TextWrapped = 0xD98;
+         inline uintptr_t TextWrapped = 0xD96;
          inline uintptr_t TextXAlignment = 0xEE4;
          inline uintptr_t TextYAlignment = 0xCE8;
     }

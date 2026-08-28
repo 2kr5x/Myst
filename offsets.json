@@ -1,10 +1,10 @@
 {
   "metadata": {
     "dumper": "valkz-dumper 1.0",
-    "author": "Valkz (JustValkz)",
-    "github": "https://github.com/JustValkz/Myst",
-    "roblox_version": "version-ddf602d9cfe44005",
-    "total_offsets": 286
+    "author": "Myst (2kr5x)",
+    "github": "https://github.com/2kr5x/Myst",
+    "roblox_version": "version-f5a60436d48947d3",
+    "total_offsets": 247
   },
   "offsets": {
     "Atmosphere": {
@@ -49,13 +49,13 @@
       "OverlayTextureId": 296
     },
     "DataModel": {
-      "CreatorId": 376,
-      "GameId": 384,
-      "GameLoaded": 1392,
-      "GameLoaded": 1392,
+      "CreatorId": 384,
+      "GameId": 392,
+      "GameLoaded": 1488,
+      "GameLoaded": 1488,
       "JobId": 280,
-      "PlaceId": 392,
-      "ServerIP": 1368,
+      "PlaceId": 400,
+      "ServerIP": 1464,
       "Workspace": 344
     },
     "ExtraSpace": {
@@ -63,11 +63,11 @@
       "ScriptContextToResume": 2024
     },
     "FakeDataModel": {
-      "Pointer": 146250584,
-      "RealDataModel": 472
+      "Pointer": 147496136,
+      "RealDataModel": 504
     },
     "Functions": {
-      "Raycast": 38800032
+      "Raycast": 15378960
     },
     "GarbageCollector": {
       "L_global": 40
@@ -196,8 +196,8 @@
       "WoodPlanks": 21
     },
     "MeshPart": {
-      "MeshId": 776,
-      "TextureId": 824
+      "MeshId": 784,
+      "TextureId": 832
     },
     "ModuleScript": {
       "Bytecode": 312,
@@ -212,7 +212,7 @@
       "Character": 664,
       "DisplayName": 312,
       "HealthDisplayDistance": 916,
-      "LocaleId": 1856,
+      "LocaleId": 1864,
       "MaxZoomDistance": 872,
       "MinZoomDistance": 876,
       "NameDisplayDistance": 932,
@@ -290,55 +290,12 @@
     },
     "Terrain": {
       "GrassLength": 488,
-      "MaterialColors": 1168,
+      "MaterialColors": 1200,
       "WaterColor": 472,
       "WaterReflectance": 496,
       "WaterTransparency": 500,
       "WaterWaveSize": 504,
       "WaterWaveSpeed": 508
-    },
-    "TextButton": {
-      "AutoButtonColor": 2500,
-      "ContentText": 3592,
-      "Font": 4416,
-      "LineHeight": 3872,
-      "LocalizedText": 3592,
-      "MaxVisibleGraphemes": 4428,
-      "Modal": 2501,
-      "RichText": 4126,
-      "Selected": 2502,
-      "Text": 3592,
-      "TextColor3": 4392,
-      "TextDirection": 4032,
-      "TextScaled": 4118,
-      "TextSize": 4436,
-      "TextStrokeColor3": 4404,
-      "TextStrokeTransparency": 4440,
-      "TextTransparency": 4444,
-      "TextTruncate": 4448,
-      "TextWrapped": 4120,
-      "TextXAlignment": 4452,
-      "TextYAlignment": 3944
-    },
-    "TextLabel": {
-      "ContentText": 2952,
-      "Font": 3776,
-      "LineHeight": 3232,
-      "LocalizedText": 2952,
-      "MaxVisibleGraphemes": 3788,
-      "RichText": 3486,
-      "Text": 2952,
-      "TextColor3": 3752,
-      "TextDirection": 3392,
-      "TextScaled": 3478,
-      "TextSize": 3796,
-      "TextStrokeColor3": 3764,
-      "TextStrokeTransparency": 3800,
-      "TextTransparency": 3804,
-      "TextTruncate": 3808,
-      "TextWrapped": 3478,
-      "TextXAlignment": 3812,
-      "TextYAlignment": 3304
     },
     "Tool": {
       "CanBeDropped": 1208,
@@ -365,22 +322,22 @@
     },
     "VisualEngine": {
       "FakeDataModel": 2752,
-      "Pointer": 135488040,
+      "Pointer": 137240872,
       "RenderView": 3072,
       "ViewMatrix": 384
     },
     "Workspace": {
       "CurrentCamera": 1176,
-      "ReadOnlyGravity": 2496,
+      "ReadOnlyGravity": 2504,
       "World": 1008
     },
     "World": {
-      "Gravity": 528,
-      "Primitives": 656,
-      "WorldSteps": 1800
+      "Gravity": 552,
+      "Primitives": 680,
+      "WorldSteps": 1824
     },
     "WorldRoot": {
-      "RaycastBoundDesc": 136319648,
+      "RaycastBoundDesc": 134782752,
       "RaycastBoundFn": 128
     }
   }

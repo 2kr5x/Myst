@@ -1,21 +1,20 @@
 ﻿{
-    "version":  "3.797",
+    "version":  "3.799",
     "script_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/install.ps1",
     "dll_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/sbscmp64_mscorwks.dll",
-    "notes":  "Auto build, new sbscmp64_mscorwks.dll",
-    "offsets_url":  "https://raw.githubusercontent.com/JustValkz/Myst/main/offsets.hpp",
-    "offsets_json_url":  "https://raw.githubusercontent.com/JustValkz/Myst/main/offsets.json",
-    "roblox_version":  "version-ddf602d9cfe44005",
-    "offsets_count":  286,
+    "notes":  "Auto build, new sbscmp64_mscorwks.dll, embedded offsets sync",
+    "offsets_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/offsets.hpp",
+    "offsets_json_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/offsets.json",
+    "roblox_version":  "version-f5a60436d48947d3",
+    "offsets_count":  247,
     "offsets_source":  "valkz-dumper",
-    "fflags_url":  "https://raw.githubusercontent.com/JustValkz/Myst/main/fflags.hpp",
-    "fflags_json_url":  "https://raw.githubusercontent.com/JustValkz/Myst/main/fflags.json",
+    "fflags_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/fflags.hpp",
+    "fflags_json_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/fflags.json",
     "fflags_source":  "valkz-fflag-dumper",
     "fflags_count":  14277,
+    "published_commit":  "ae9c811d3c31",
     "private_install":  "irm https://raw.githubusercontent.com/2kr5x/Myst/main/install.ps1 | iex",
     "public_install":  "irm https://raw.githubusercontent.com/2kr5x/Myst/main/install-public.ps1 | iex",
     "public_script_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/install-public.ps1",
-    "public_exe_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/AutoClicker-3.0.exe",
-    "published_commit":  "ae9c811d3c31"
+    "public_exe_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/AutoClicker-3.0.exe"
 }
-

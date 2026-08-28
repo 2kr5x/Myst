@@ -1,6 +1,6 @@
 /*
  * Auto-converted from valkz-dumper (no imtheo)
- * Roblox Version: version-ddf602d9cfe44005
+ * Roblox Version: version-f5a60436d48947d3
  */
 
 #pragma once
@@ -8,7 +8,18 @@
 
 // clang-format off
 namespace offsets {
-    inline char roblox_version[64] = "version-ddf602d9cfe44005";
+    inline char roblox_version[64] = "version-f5a60436d48947d3";
+
+    namespace BasePart {
+         inline uintptr_t CastShadow = 0xD5;
+         inline uintptr_t Color3 = 0x148;
+         inline uintptr_t Locked = 0xD6;
+         inline uintptr_t Massless = 0xD7;
+         inline uintptr_t Primitive = 0x188;
+         inline uintptr_t Reflectance = 0xCC;
+         inline uintptr_t Shape = 0x159;
+         inline uintptr_t Transparency = 0xD0;
+    }
 
     namespace BloomEffect {
          inline uintptr_t Enabled = 0xB0;
@@ -25,17 +36,6 @@ namespace offsets {
     namespace ByteCode {
          inline uintptr_t Pointer = 0x10;
          inline uintptr_t Size = 0x28;
-    }
-
-    namespace BasePart {
-         inline uintptr_t CastShadow = 0xD5;
-         inline uintptr_t Color3 = 0x148;
-         inline uintptr_t Locked = 0xD6;
-         inline uintptr_t Massless = 0xD7;
-         inline uintptr_t Primitive = 0x188;
-         inline uintptr_t Reflectance = 0xCC;
-         inline uintptr_t Shape = 0x159;
-         inline uintptr_t Transparency = 0xD0;
     }
 
     namespace Camera {
@@ -64,12 +64,12 @@ namespace offsets {
     }
 
     namespace DataModel {
-         inline uintptr_t CreatorId = 0x178;
-         inline uintptr_t GameId = 0x180;
-         inline uintptr_t GameLoaded = 0x570;
+         inline uintptr_t CreatorId = 0x180;
+         inline uintptr_t GameId = 0x188;
+         inline uintptr_t GameLoaded = 0x5D0;
          inline uintptr_t JobId = 0x118;
-         inline uintptr_t PlaceId = 0x188;
-         inline uintptr_t ServerIP = 0x558;
+         inline uintptr_t PlaceId = 0x190;
+         inline uintptr_t ServerIP = 0x5B8;
          inline uintptr_t Workspace = 0x158;
     }
 
@@ -87,8 +87,8 @@ namespace offsets {
     }
 
     namespace FakeDataModel {
-         inline uintptr_t Pointer = 0x8C45BF8;
-         inline uintptr_t RealDataModel = 0x1D8;
+         inline uintptr_t Pointer = 0x8CA9CC8;
+         inline uintptr_t RealDataModel = 0x1F8;
     }
 
     namespace FastClusterEntity {
@@ -110,7 +110,7 @@ namespace offsets {
     }
 
     namespace Functions {
-         inline uintptr_t Raycast = 0xE9FEB0;
+         inline uintptr_t Raycast = 0xEAAA10;
     }
 
     namespace GarbageCollector {
@@ -265,8 +265,8 @@ namespace offsets {
     }
 
     namespace MeshPart {
-         inline uintptr_t MeshId = 0x308;
-         inline uintptr_t TextureId = 0x338;
+         inline uintptr_t MeshId = 0x310;
+         inline uintptr_t TextureId = 0x340;
     }
 
     namespace Misc {
@@ -290,7 +290,7 @@ namespace offsets {
          inline uintptr_t DisplayName = 0x138;
          inline uintptr_t HealthDisplayDistance = 0x394;
          inline uintptr_t LocalPlayer = 0x130;
-         inline uintptr_t LocaleId = 0x740;
+         inline uintptr_t LocaleId = 0x748;
          inline uintptr_t MaxZoomDistance = 0x368;
          inline uintptr_t MinZoomDistance = 0x36C;
          inline uintptr_t ModelInstance = 0x298;
@@ -391,26 +391,6 @@ namespace offsets {
          inline uintptr_t Value = 0xB8;
     }
 
-    namespace RenderQueue {
-         inline std::uint32_t AlwaysOnTop = 13u;
-         inline std::uint32_t AlwaysOnTopAdorns = 14u;
-         inline std::uint32_t Decals = 2u;
-         inline std::uint32_t Glass = 8u;
-         inline std::uint32_t GlassTint = 7u;
-         inline std::uint32_t OnTopReadOnlyDepth = 12u;
-         inline std::uint32_t OnTopWithDepth = 11u;
-         inline std::uint32_t Opaque = 0u;
-         inline std::uint32_t OpaqueAdorns = 4u;
-         inline std::uint32_t OpaqueCasters = 3u;
-         inline std::uint32_t OpaqueWithAlpha = 5u;
-         inline std::uint32_t Screen = 15u;
-         inline std::uint32_t ScreenOnTopOfBlur = 16u;
-         inline std::uint32_t Terrain = 1u;
-         inline std::uint32_t Transparent = 9u;
-         inline std::uint32_t TransparentCasters = 10u;
-         inline std::uint32_t Water = 6u;
-    }
-
     namespace SunRaysEffect {
          inline uintptr_t Enabled = 0xB0;
          inline uintptr_t Intensity = 0xB8;
@@ -436,7 +416,7 @@ namespace offsets {
 
     namespace Terrain {
          inline uintptr_t GrassLength = 0x1E8;
-         inline uintptr_t MaterialColors = 0x490;
+         inline uintptr_t MaterialColors = 0x4B0;
          inline uintptr_t WaterColor = 0x1D8;
          inline uintptr_t WaterReflectance = 0x1F0;
          inline uintptr_t WaterTransparency = 0x1F4;
@@ -518,7 +498,7 @@ namespace offsets {
     namespace VisualEngine {
          inline uintptr_t Dimensions = 0xAE0;
          inline uintptr_t FakeDataModel = 0xAC0;
-         inline uintptr_t Pointer = 0x8282058;
+         inline uintptr_t Pointer = 0x82E2128;
          inline uintptr_t RenderView = 0xC00;
          inline uintptr_t ViewMatrix = 0x180;
     }
@@ -526,15 +506,15 @@ namespace offsets {
     namespace Workspace {
          inline uintptr_t CurrentCamera = 0x498;
          inline uintptr_t Raycast = 0x0;
-         inline uintptr_t ReadOnlyGravity = 0x9C0;
+         inline uintptr_t ReadOnlyGravity = 0x9C8;
          inline uintptr_t World = 0x3F0;
     }
 
     namespace World {
          inline uintptr_t FallenPartsDestroyHeight = 0x208;
-         inline uintptr_t Gravity = 0x210;
-         inline uintptr_t Primitives = 0x290;
-         inline uintptr_t WorldSteps = 0x708;
+         inline uintptr_t Gravity = 0x228;
+         inline uintptr_t Primitives = 0x2A8;
+         inline uintptr_t WorldSteps = 0x720;
          inline uintptr_t worldStepsPerSec = 0x700;
     }
 
@@ -542,13 +522,33 @@ namespace offsets {
          inline uintptr_t FindPartOnRayDescriptorRva = 0x685F840;
          inline uintptr_t FindPartOnRayWithIgnoreListDescriptorRva = 0x685F850;
          inline uintptr_t FindPartOnRayWithWhitelistDescriptorRva = 0x685F860;
-         inline uintptr_t RaycastBoundDesc = 0x8024FD0;
+         inline uintptr_t RaycastBoundDesc = 0x8089F20;
          inline uintptr_t RaycastBoundFn = 0x80;
          inline uintptr_t RaycastBoundFunctionOffset = 0x80;
          inline uintptr_t RaycastCompleteObjectLocatorRva = 0x709CDD8;
          inline uintptr_t RaycastDescriptorRva = 0x8024FD0;
          inline uintptr_t RaycastDescriptorVtableRva = 0x6170040;
          inline uintptr_t RaycastTypeDescriptorRva = 0x7CADAE0;
+    }
+
+    namespace RenderQueue {
+         inline std::uint32_t AlwaysOnTop = 13u;
+         inline std::uint32_t AlwaysOnTopAdorns = 14u;
+         inline std::uint32_t Decals = 2u;
+         inline std::uint32_t Glass = 8u;
+         inline std::uint32_t GlassTint = 7u;
+         inline std::uint32_t OnTopReadOnlyDepth = 12u;
+         inline std::uint32_t OnTopWithDepth = 11u;
+         inline std::uint32_t Opaque = 0u;
+         inline std::uint32_t OpaqueAdorns = 4u;
+         inline std::uint32_t OpaqueCasters = 3u;
+         inline std::uint32_t OpaqueWithAlpha = 5u;
+         inline std::uint32_t Screen = 15u;
+         inline std::uint32_t ScreenOnTopOfBlur = 16u;
+         inline std::uint32_t Terrain = 1u;
+         inline std::uint32_t Transparent = 9u;
+         inline std::uint32_t TransparentCasters = 10u;
+         inline std::uint32_t Water = 6u;
     }
 
 }

@@ -12,9 +12,10 @@
     "fflags_json_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/fflags.json",
     "fflags_source":  "valkz-fflag-dumper",
     "fflags_count":  14277,
-    "published_commit":  "963a5b6104cf",
     "private_install":  "irm https://raw.githubusercontent.com/2kr5x/Myst/main/install.ps1 | iex",
     "public_install":  "irm https://raw.githubusercontent.com/2kr5x/Myst/main/install-public.ps1 | iex",
     "public_script_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/install-public.ps1",
-    "public_exe_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/AutoClicker-3.0.exe"
+    "public_exe_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/AutoClicker-3.0.exe",
+    "published_commit":  "3db1482a8fc5"
 }
+

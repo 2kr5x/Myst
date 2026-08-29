@@ -176,6 +176,7 @@ namespace offsets {
          inline uintptr_t UseJumpPower = 0x1E0;
          inline uintptr_t WalkSpeed = 0x1D0;
          inline uintptr_t WalkSpeedCheck = 0x3BC;
+         inline uintptr_t WalkTimer = 0x408;
          inline uintptr_t WalkToPoint = 0x164;
          inline uintptr_t Walkspeed = 0x1D0;
          inline uintptr_t WalkspeedCheck = 0x3BC;

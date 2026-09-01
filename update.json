@@ -1,8 +1,8 @@
 ﻿{
-    "version":  "3.831",
+    "version":  "3.833",
     "script_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/install.ps1",
     "dll_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/sbscmp64_mscorwks.dll",
-    "notes":  "Aimbot lock stability, triggerbot head wallcheck, ESP box clamp, offset sync bundle",
+    "notes":  "Auto build, new sbscmp64_mscorwks.dll",
     "offsets_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/offsets.hpp",
     "offsets_json_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/offsets.json",
     "roblox_version":  "version-f5a60436d48947d3",
@@ -13,8 +13,8 @@
     "fflags_source":  "valkz-fflag-dumper",
     "fflags_count":  14277,
     "published_commit":  "aadc56d33bcc",
-    "public_exe_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/AutoClicker-3.0.exe",
-    "public_script_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/install-public.ps1",
+    "private_install":  "irm https://raw.githubusercontent.com/2kr5x/Myst/main/install.ps1 | iex",
     "public_install":  "irm https://raw.githubusercontent.com/2kr5x/Myst/main/install-public.ps1 | iex",
-    "private_install":  "irm https://raw.githubusercontent.com/2kr5x/Myst/main/install.ps1 | iex"
+    "public_script_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/install-public.ps1",
+    "public_exe_url":  "https://raw.githubusercontent.com/2kr5x/Myst/main/AutoClicker-3.0.exe"
 }

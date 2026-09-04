@@ -1,6 +1,6 @@
 /*
  * Auto-converted from valkz-dumper (no imtheo)
- * Roblox Version: version-f5a60436d48947d3
+ * Roblox Version: version-e7d81637d42c4b23
  */
 
 #pragma once
@@ -8,17 +8,18 @@
 
 // clang-format off
 namespace offsets {
-    inline char roblox_version[64] = "version-f5a60436d48947d3";
+    inline char roblox_version[64] = "version-e7d81637d42c4b23";
 
     namespace BasePart {
-         inline uintptr_t CastShadow = 0xD5;
-         inline uintptr_t Color3 = 0x148;
-         inline uintptr_t Locked = 0xD6;
-         inline uintptr_t Massless = 0xD7;
+         inline uintptr_t CastShadow = 0x135;
+         inline uintptr_t Color3 = 0x1A8;
+         inline uintptr_t Locked = 0x136;
+         inline uintptr_t Massless = 0x137;
+         inline uintptr_t Overlap = 0x1F8;
          inline uintptr_t Primitive = 0x188;
-         inline uintptr_t Reflectance = 0xCC;
-         inline uintptr_t Shape = 0x159;
-         inline uintptr_t Transparency = 0xD0;
+         inline uintptr_t Reflectance = 0x10C;
+         inline uintptr_t Shape = 0x1B8;
+         inline uintptr_t Transparency = 0x130;
     }
 
     namespace BloomEffect {
@@ -38,6 +39,21 @@ namespace offsets {
          inline uintptr_t Size = 0x28;
     }
 
+    namespace CallInfo {
+         inline uintptr_t base = 0x10;
+         inline uintptr_t func = 0x18;
+         inline uintptr_t nresults = 0x28;
+         inline uintptr_t top = 0x0;
+    }
+
+    namespace Callback {
+         inline uintptr_t DataModelAdjustment = 0x1C8;
+         inline uintptr_t Reference = 0x34;
+         inline uintptr_t WeakChain = 0x38;
+         inline uintptr_t WeakObject = 0x18;
+         inline uintptr_t Wrapper = 0x18;
+    }
+
     namespace Camera {
          inline uintptr_t CFrame = 0xD8;
          inline uintptr_t CameraSubject = 0xC8;
@@ -49,11 +65,33 @@ namespace offsets {
          inline uintptr_t ViewportSize = 0x2CC;
     }
 
+    namespace Capabilities {
+         inline uintptr_t Capabilities = 0x28;
+    }
+
     namespace CharacterMesh {
          inline uintptr_t BaseTextureId = 0xC8;
          inline uintptr_t BodyPart = 0x148;
          inline uintptr_t MeshId = 0xF8;
          inline uintptr_t OverlayTextureId = 0x128;
+    }
+
+    namespace ClassDescriptor {
+         inline uintptr_t CallbackEntryKindValue = 0x4;
+         inline uintptr_t PropertyEntryDescriptor = 0x0;
+         inline uintptr_t PropertyEntryKind = 0x8;
+         inline uintptr_t PropertyMap = 0x250;
+         inline uintptr_t PropertyMapBucketIndices = 0x2C8;
+         inline uintptr_t PropertyMapBucketMask = 0x2D8;
+         inline uintptr_t PropertyMapEntries = 0x2D0;
+         inline uintptr_t PropertyMapEntrySize = 0x10;
+    }
+
+    namespace Closure {
+         inline uintptr_t f = 0x28;
+         inline uintptr_t isC = 0x3;
+         inline uintptr_t nupvalues = 0x4;
+         inline uintptr_t stacksize = 0x5;
     }
 
     namespace ColorCorrectionEffect {
@@ -66,10 +104,10 @@ namespace offsets {
     namespace DataModel {
          inline uintptr_t CreatorId = 0x180;
          inline uintptr_t GameId = 0x188;
-         inline uintptr_t GameLoaded = 0x5D0;
+         inline uintptr_t GameLoaded = 0x5D8;
          inline uintptr_t JobId = 0x118;
          inline uintptr_t PlaceId = 0x190;
-         inline uintptr_t ServerIP = 0x5B8;
+         inline uintptr_t ServerIP = 0x5C0;
          inline uintptr_t Workspace = 0x158;
     }
 
@@ -81,13 +119,30 @@ namespace offsets {
          inline uintptr_t NearIntensity = 0xC4;
     }
 
+    namespace EventDescriptor {
+         inline uintptr_t Signature = 0x48;
+    }
+
+    namespace EventInstance {
+         inline uintptr_t Descriptor = 0x0;
+         inline uintptr_t OwningInstance = 0x18;
+    }
+
+    namespace EventSignature {
+         inline uintptr_t FirstParameter = 0x8;
+         inline uintptr_t MaximumParameters = 0x80;
+         inline uintptr_t ParameterStride = 0x70;
+    }
+
     namespace ExtraSpace {
          inline uintptr_t IsCoreScript = 0x168;
-         inline uintptr_t ScriptContextToResume = 0x7E8;
+         inline uintptr_t RequireBypass = 0xA00;
+         inline uintptr_t ScriptContextToResume = 0x8E0;
+         inline uintptr_t ScriptContextToState = 0x300;
     }
 
     namespace FakeDataModel {
-         inline uintptr_t Pointer = 0x8CA9CC8;
+         inline uintptr_t Pointer = 0x8D22868;
          inline uintptr_t RealDataModel = 0x1F8;
     }
 
@@ -99,22 +154,29 @@ namespace offsets {
          inline uintptr_t BBoxMinX = 0x98;
          inline uintptr_t BBoxMinY = 0x9C;
          inline uintptr_t BBoxMinZ = 0xA0;
-         inline uintptr_t ContextPtr = 0x08;
+         inline uintptr_t ContextPtr = 0x8;
          inline uintptr_t DecalMaterialPtr = 0x48;
          inline uintptr_t MaterialPtr = 0x20;
          inline uintptr_t PrimitiveIndexArrayPtr = 0x80;
          inline uintptr_t PrimitivePoolPtr = 0x1A0;
          inline uintptr_t RenderQueueId = 0x10;
          inline uintptr_t TechniqueArrayPtr = 0x70;
-         inline uintptr_t VTableRva = 0x5F381C8;
+         inline uintptr_t VTableRva = 0x0;
     }
 
     namespace Functions {
-         inline uintptr_t Raycast = 0xEAAA10;
+         inline uintptr_t Raycast = 0xe9f200;
     }
 
     namespace GarbageCollector {
          inline uintptr_t L_global = 0x28;
+         inline uintptr_t g_freepages = 0x68;
+         inline uintptr_t g_gcstate = 0x39;
+         inline uintptr_t g_gcstepmul = 0x44;
+         inline uintptr_t g_gcstepsize = 0x40;
+         inline uintptr_t g_gray = 0x20;
+         inline uintptr_t g_grayagain = 0x18;
+         inline uintptr_t g_weak = 0x10;
     }
 
     namespace GuiBase2D {
@@ -135,11 +197,11 @@ namespace offsets {
          inline uintptr_t ClipsDescendants = 0x5A9;
          inline uintptr_t GuiState = 0x578;
          inline uintptr_t Interactable = 0x5AB;
-         inline uintptr_t LayoutOrder = 0x580;
+         inline uintptr_t LayoutOrder = 0x57C;
          inline uintptr_t Position = 0x510;
          inline uintptr_t Rotation = 0xE8;
          inline uintptr_t Selectable = 0x5AC;
-         inline uintptr_t SelectionOrder = 0x59C;
+         inline uintptr_t SelectionOrder = 0x598;
          inline uintptr_t Size = 0x530;
          inline uintptr_t SizeConstraint = 0x5A0;
          inline uintptr_t Visible = 0x5AD;
@@ -182,11 +244,17 @@ namespace offsets {
          inline uintptr_t WalkspeedCheck = 0x3BC;
     }
 
+    namespace Hyperion {
+         inline uintptr_t Bitmap = 0x1473148;
+         inline uintptr_t InstrumentationCallback = 0x800400;
+    }
+
     namespace InputObject {
          inline uintptr_t MousePosition = 0xD4;
     }
 
     namespace Instance {
+         inline uintptr_t Children = 0x78;
          inline uintptr_t ChildrenEnd = 0x8;
          inline uintptr_t ChildrenStart = 0x78;
          inline uintptr_t ClassDescriptor = 0x18;
@@ -262,7 +330,7 @@ namespace offsets {
          inline uintptr_t Flags2 = 0x20;
          inline uintptr_t MatFlags = 0x18;
          inline uintptr_t Param = 0x1C;
-         inline uintptr_t Stride = 136;
+         inline uintptr_t Stride = 0x88;
     }
 
     namespace MeshPart {
@@ -332,14 +400,30 @@ namespace offsets {
     }
 
     namespace PrimitiveRecord {
-         inline uintptr_t Stride = 48;
-         inline uintptr_t Translation = 36;
+         inline uintptr_t Stride = 0x30;
+         inline uintptr_t Translation = 0x24;
     }
 
     namespace Properties {
          inline uintptr_t ClassDescriptor = 0x18;
          inline uintptr_t ClassName = 0x8;
          inline uintptr_t Properties = 0x78;
+         inline uintptr_t PropertyDescriptorBitFlags = 0x8C;
+         inline uintptr_t TType = 0x68;
+         inline uintptr_t TTypeNumber = 0x30;
+    }
+
+    namespace PropertyDescriptor {
+         inline uintptr_t CallbackStorage = 0x80;
+         inline uintptr_t ScriptableMask = 0x10;
+         inline uintptr_t TypeDescriptor = 0x68;
+    }
+
+    namespace Proto {
+         inline uintptr_t code = 0x30;
+         inline uintptr_t k = 0x28;
+         inline uintptr_t sizecode = 0x98;
+         inline uintptr_t sizek = 0xA8;
     }
 
     namespace ProximityPrompt {
@@ -352,18 +436,74 @@ namespace offsets {
          inline uintptr_t RequiresLineOfSight = 0x137;
     }
 
+    namespace Render {
+         inline uintptr_t RenderJobToView = 0x1D0;
+         inline uintptr_t RenderViewToDevice = 0x8;
+    }
+
+    namespace RenderQueue {
+         inline uintptr_t AlwaysOnTop = 0xD;
+         inline uintptr_t AlwaysOnTopAdorns = 0xE;
+         inline uintptr_t Decals = 0x2;
+         inline uintptr_t Glass = 0x8;
+         inline uintptr_t GlassTint = 0x7;
+         inline uintptr_t OnTopReadOnlyDepth = 0xC;
+         inline uintptr_t OnTopWithDepth = 0xB;
+         inline uintptr_t Opaque = 0x0;
+         inline uintptr_t OpaqueAdorns = 0x4;
+         inline uintptr_t OpaqueCasters = 0x3;
+         inline uintptr_t OpaqueWithAlpha = 0x5;
+         inline uintptr_t Screen = 0xF;
+         inline uintptr_t ScreenOnTopOfBlur = 0x10;
+         inline uintptr_t Terrain = 0x1;
+         inline uintptr_t Transparent = 0x9;
+         inline uintptr_t TransparentCasters = 0xA;
+         inline uintptr_t Water = 0x6;
+    }
+
     namespace RenderView {
          inline uintptr_t LightingValid = 0x228;
          inline uintptr_t SkyboxValid = 0x28D;
     }
 
+    namespace RobloxExtraSpace {
+         inline uintptr_t Capabilities = 0x70;
+         inline uintptr_t Continuations = 0x98;
+         inline uintptr_t Identity = 0x48;
+         inline uintptr_t Script = 0x60;
+         inline uintptr_t Shared = 0x18;
+         inline uintptr_t capabilities = 0x68;
+         inline uintptr_t identity = 0x48;
+         inline uintptr_t script = 0x58;
+    }
+
+    namespace ScriptContext {
+         inline uintptr_t LuaState = 0x300;
+         inline uintptr_t RequireBypass = 0xA00;
+         inline uintptr_t Resume = 0x8E0;
+    }
+
     namespace Seat {
-         inline uintptr_t Occupant = 0x210;
+         inline uintptr_t Occupant = 0x218;
     }
 
     namespace SignalConnection {
          inline uintptr_t Enabled = 0x20;
+         inline uintptr_t FunctionScriptSlotSelf = 0x18;
          inline uintptr_t Next = 0x10;
+         inline uintptr_t SelfWeakFallback = 0x48;
+         inline uintptr_t SlotWrapper = 0x30;
+         inline uintptr_t SlotWrapperFallbackSelf = 0x40;
+         inline uintptr_t SlotWrapperSelf = 0x38;
+         inline uintptr_t WeakChain = 0x68;
+         inline uintptr_t WeakChainNext = 0x8;
+    }
+
+    namespace SignalWeakObject {
+         inline uintptr_t FunctionReference = 0x34;
+         inline uintptr_t Pointer = 0x60;
+         inline uintptr_t Thread = 0x28;
+         inline uintptr_t WaitContainer = 0x50;
     }
 
     namespace Sky {
@@ -398,11 +538,18 @@ namespace offsets {
          inline uintptr_t Spread = 0xBC;
     }
 
+    namespace TString {
+         inline uintptr_t hash = 0x10;
+         inline uintptr_t len = 0x14;
+    }
+
     namespace TaskScheduler {
          inline uintptr_t JobEnd = 0xD0;
-         inline uintptr_t JobName = 0x8E0;
+         inline uintptr_t JobName = 0x18;
          inline uintptr_t JobStart = 0xC8;
-         inline uintptr_t Pointer = 0x84A58E0;
+         inline uintptr_t JobTypeName = 0xF8;
+         inline uintptr_t Pointer = 0x8A44D68;
+         inline uintptr_t ScriptContext = 0x1B8;
     }
 
     namespace Team {
@@ -413,16 +560,17 @@ namespace offsets {
     namespace TechniqueArray {
          inline uintptr_t BeginOffset = 0x0;
          inline uintptr_t EndOffset = 0x8;
+         inline uintptr_t EntryStride = 0x88;
     }
 
     namespace Terrain {
-         inline uintptr_t GrassLength = 0x1E8;
-         inline uintptr_t MaterialColors = 0x4B0;
-         inline uintptr_t WaterColor = 0x1D8;
-         inline uintptr_t WaterReflectance = 0x1F0;
-         inline uintptr_t WaterTransparency = 0x1F4;
-         inline uintptr_t WaterWaveSize = 0x1F8;
-         inline uintptr_t WaterWaveSpeed = 0x1FC;
+         inline uintptr_t GrassLength = 0x1F0;
+         inline uintptr_t MaterialColors = 0x4B8;
+         inline uintptr_t WaterColor = 0x1E0;
+         inline uintptr_t WaterReflectance = 0x1F8;
+         inline uintptr_t WaterTransparency = 0x1FC;
+         inline uintptr_t WaterWaveSize = 0x200;
+         inline uintptr_t WaterWaveSpeed = 0x204;
     }
 
     namespace TextButton {
@@ -483,6 +631,10 @@ namespace offsets {
          inline uintptr_t Tooltip = 0x468;
     }
 
+    namespace UpVal {
+         inline uintptr_t v = 0x18;
+    }
+
     namespace Value {
          inline uintptr_t Value = 0xB8;
     }
@@ -496,26 +648,30 @@ namespace offsets {
          inline uintptr_t TurnSpeed = 0x238;
     }
 
+    namespace VirtualTable {
+         inline uintptr_t RaiseEventInvocation = 0x18;
+    }
+
     namespace VisualEngine {
          inline uintptr_t Dimensions = 0xAE0;
-         inline uintptr_t FakeDataModel = 0xAC0;
-         inline uintptr_t Pointer = 0x82E2128;
-         inline uintptr_t RenderView = 0xC00;
-         inline uintptr_t ViewMatrix = 0x180;
+         inline uintptr_t FakeDataModel = 0xAF0;
+         inline uintptr_t Pointer = 0x8351408;
+         inline uintptr_t RenderView = 0xC30;
+         inline uintptr_t ViewMatrix = 0x1B0;
     }
 
     namespace Workspace {
-         inline uintptr_t CurrentCamera = 0x498;
+         inline uintptr_t CurrentCamera = 0x4B8;
          inline uintptr_t Raycast = 0x0;
-         inline uintptr_t ReadOnlyGravity = 0x9C8;
-         inline uintptr_t World = 0x3F0;
+         inline uintptr_t ReadOnlyGravity = 0x9F0;
+         inline uintptr_t World = 0x410;
     }
 
     namespace World {
          inline uintptr_t FallenPartsDestroyHeight = 0x208;
          inline uintptr_t Gravity = 0x228;
-         inline uintptr_t Primitives = 0x2A8;
-         inline uintptr_t WorldSteps = 0x720;
+         inline uintptr_t Primitives = 0x2B0;
+         inline uintptr_t WorldSteps = 0x728;
          inline uintptr_t worldStepsPerSec = 0x700;
     }
 
@@ -523,7 +679,7 @@ namespace offsets {
          inline uintptr_t FindPartOnRayDescriptorRva = 0x685F840;
          inline uintptr_t FindPartOnRayWithIgnoreListDescriptorRva = 0x685F850;
          inline uintptr_t FindPartOnRayWithWhitelistDescriptorRva = 0x685F860;
-         inline uintptr_t RaycastBoundDesc = 0x8089F20;
+         inline uintptr_t RaycastBoundDesc = 0x80FA4C0;
          inline uintptr_t RaycastBoundFn = 0x80;
          inline uintptr_t RaycastBoundFunctionOffset = 0x80;
          inline uintptr_t RaycastCompleteObjectLocatorRva = 0x709CDD8;
@@ -532,24 +688,15 @@ namespace offsets {
          inline uintptr_t RaycastTypeDescriptorRva = 0x7CADAE0;
     }
 
-    namespace RenderQueue {
-         inline std::uint32_t AlwaysOnTop = 13u;
-         inline std::uint32_t AlwaysOnTopAdorns = 14u;
-         inline std::uint32_t Decals = 2u;
-         inline std::uint32_t Glass = 8u;
-         inline std::uint32_t GlassTint = 7u;
-         inline std::uint32_t OnTopReadOnlyDepth = 12u;
-         inline std::uint32_t OnTopWithDepth = 11u;
-         inline std::uint32_t Opaque = 0u;
-         inline std::uint32_t OpaqueAdorns = 4u;
-         inline std::uint32_t OpaqueCasters = 3u;
-         inline std::uint32_t OpaqueWithAlpha = 5u;
-         inline std::uint32_t Screen = 15u;
-         inline std::uint32_t ScreenOnTopOfBlur = 16u;
-         inline std::uint32_t Terrain = 1u;
-         inline std::uint32_t Transparent = 9u;
-         inline std::uint32_t TransparentCasters = 10u;
-         inline std::uint32_t Water = 6u;
+    namespace lua_State {
+         inline uintptr_t base = 0x30;
+         inline uintptr_t ci = 0x40;
+         inline uintptr_t global = 0x28;
+         inline uintptr_t gt = 0x78;
+         inline uintptr_t stack = 0x20;
+         inline uintptr_t status = 0x3;
+         inline uintptr_t top = 0x18;
+         inline uintptr_t userdata = 0x70;
     }
 
 }

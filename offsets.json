@@ -1,12 +1,15 @@
 {
   "metadata": {
-    "dumper": "valkz-dumper 1.0",
+    "dumper": "Valkz Dumper 1.0",
     "author": "Myst (2kr5x)",
     "github": "https://github.com/2kr5x/Myst",
-    "roblox_version": "version-f5a60436d48947d3",
-    "total_offsets": 247
+    "roblox_version": "version-e7d81637d42c4b23",
+    "total_offsets": 14822
   },
   "offsets": {
+    "Actor": {
+      "ParallelFlag": 256
+    },
     "Atmosphere": {
       "Color": 184,
       "Decay": 196,
@@ -20,12 +23,14 @@
       "Color3": 424,
       "Locked": 310,
       "Massless": 311,
+      "Overlap": 504,
       "Primitive": 392,
       "Reflectance": 268,
-      "Shape": 441,
+      "Shape": 440,
       "Transparency": 304
     },
     "BloomEffect": {
+      "Enabled": 176,
       "Intensity": 184,
       "Size": 188,
       "Threshold": 192
@@ -33,6 +38,19 @@
     "ByteCode": {
       "Pointer": 16,
       "Size": 40
+    },
+    "CallInfo": {
+      "base": 16,
+      "func": 24,
+      "nresults": 40,
+      "top": 0
+    },
+    "Callback": {
+      "DataModelAdjustment": 456,
+      "Reference": 52,
+      "WeakChain": 56,
+      "WeakObject": 24,
+      "Wrapper": 24
     },
     "Camera": {
       "CFrame": 216,
@@ -42,35 +60,89 @@
       "Rotation": 216,
       "ViewportSize": 716
     },
+    "Capabilities": {
+      "Capabilities": 40
+    },
     "CharacterMesh": {
       "BaseTextureId": 200,
       "BodyPart": 328,
       "MeshId": 248,
       "OverlayTextureId": 296
     },
+    "ClassDescriptor": {
+      "CallbackEntryKindValue": 4,
+      "PropertyEntryDescriptor": 0,
+      "PropertyEntryKind": 8,
+      "PropertyMap": 592,
+      "PropertyMapBucketIndices": 712,
+      "PropertyMapBucketMask": 728,
+      "PropertyMapEntries": 720,
+      "PropertyMapEntrySize": 16
+    },
+    "Closure": {
+      "f": 40,
+      "isC": 3,
+      "nupvalues": 4,
+      "stacksize": 5
+    },
     "DataModel": {
       "CreatorId": 384,
       "GameId": 392,
-      "GameLoaded": 1488,
-      "GameLoaded": 1488,
+      "GameLoaded": 1496,
+      "GameLoaded": 1496,
       "JobId": 280,
       "PlaceId": 400,
-      "ServerIP": 1464,
+      "ServerIP": 1472,
       "Workspace": 344
+    },
+    "EventDescriptor": {
+      "Signature": 72
+    },
+    "EventInstance": {
+      "Descriptor": 0,
+      "OwningInstance": 24
+    },
+    "EventSignature": {
+      "FirstParameter": 8,
+      "MaximumParameters": 128,
+      "ParameterStride": 112
     },
     "ExtraSpace": {
       "IsCoreScript": 360,
-      "ScriptContextToResume": 2024
+      "RequireBypass": 2560,
+      "ScriptContextToResume": 2272,
+      "ScriptContextToState": 768
     },
     "FakeDataModel": {
-      "Pointer": 147496136,
+      "Pointer": 147990632,
       "RealDataModel": 504
     },
-    "Functions": {
-      "Raycast": 15378960
+    "FastClusterEntity": {
+      "AlphaByte": 20,
+      "BBoxMaxX": 164,
+      "BBoxMaxY": 168,
+      "BBoxMaxZ": 172,
+      "BBoxMinX": 152,
+      "BBoxMinY": 156,
+      "BBoxMinZ": 160,
+      "ContextPtr": 8,
+      "DecalMaterialPtr": 72,
+      "MaterialPtr": 32,
+      "PrimitiveIndexArrayPtr": 128,
+      "PrimitivePoolPtr": 416,
+      "RenderQueueId": 16,
+      "TechniqueArrayPtr": 112,
+      "VTableRva": 0
     },
     "GarbageCollector": {
-      "L_global": 40
+      "L_global": 40,
+      "g_freepages": 104,
+      "g_gcstate": 57,
+      "g_gcstepmul": 68,
+      "g_gcstepsize": 64,
+      "g_gray": 32,
+      "g_grayagain": 24,
+      "g_weak": 16
     },
     "GuiBase2D": {
       "AbsolutePosition": 264,
@@ -89,11 +161,11 @@
       "ClipsDescendants": 1449,
       "GuiState": 1400,
       "Interactable": 1451,
-      "LayoutOrder": 1408,
+      "LayoutOrder": 1404,
       "Position": 1296,
       "Rotation": 232,
       "Selectable": 1452,
-      "SelectionOrder": 1436,
+      "SelectionOrder": 1432,
       "Size": 1328,
       "SizeConstraint": 1440,
       "Visible": 1453,
@@ -128,10 +200,15 @@
       "WalkSpeedCheck": 956,
       "WalkToPoint": 356
     },
+    "Hyperion": {
+      "Bitmap": 21442888,
+      "InstrumentationCallback": 8389632
+    },
     "InputObject": {
       "MousePosition": 212
     },
     "Instance": {
+      "Children": 120,
       "ChildrenEnd": 8,
       "ChildrenStart": 120,
       "ClassDescriptor": 24,
@@ -195,9 +272,20 @@
       "Snow": 30,
       "WoodPlanks": 21
     },
+    "MaterialLayer": {
+      "ColorData": 36,
+      "FillModeByte": 17,
+      "Flags2": 32,
+      "MatFlags": 24,
+      "Param": 28,
+      "Stride": 136
+    },
     "MeshPart": {
       "MeshId": 784,
       "TextureId": 832
+    },
+    "Misc": {
+      "AnimationId": 192
     },
     "ModuleScript": {
       "Bytecode": 312,
@@ -205,16 +293,19 @@
     },
     "MouseService": {
       "InputObject": 256,
-      "InputObject2": 240
+      "InputObject2": 240,
+      "MousePosition": 212
     },
     "Player": {
       "AccountAge": 860,
       "Character": 664,
       "DisplayName": 312,
       "HealthDisplayDistance": 916,
+      "LocalPlayer": 304,
       "LocaleId": 1864,
       "MaxZoomDistance": 872,
       "MinZoomDistance": 876,
+      "ModelInstance": 664,
       "NameDisplayDistance": 932,
       "Team": 728,
       "TeamColor": 944,
@@ -229,10 +320,12 @@
       "CFrame": 200,
       "Material": 582,
       "Orientation": 200,
+      "Owner": 520,
       "Position": 236,
       "PrimitiveFlags": 438,
       "Rotation": 200,
-      "Size": 444
+      "Size": 444,
+      "Validate": 6
     },
     "PrimitiveFlags": {
       "Anchored": 2,
@@ -240,10 +333,31 @@
       "CanQuery": 32,
       "CanTouch": 16
     },
+    "PrimitivePool": {
+      "ArrayBase": 32
+    },
+    "PrimitiveRecord": {
+      "Stride": 48,
+      "Translation": 36
+    },
     "Properties": {
       "ClassDescriptor": 24,
       "ClassName": 8,
-      "Properties": 120
+      "Properties": 120,
+      "PropertyDescriptorBitFlags": 140,
+      "TType": 104,
+      "TTypeNumber": 48
+    },
+    "PropertyDescriptor": {
+      "CallbackStorage": 128,
+      "ScriptableMask": 16,
+      "TypeDescriptor": 104
+    },
+    "Proto": {
+      "code": 48,
+      "k": 40,
+      "sizecode": 152,
+      "sizek": 168
     },
     "ProximityPrompt": {
       "ActionText": 176,
@@ -254,16 +368,67 @@
       "ObjectText": 208,
       "RequiresLineOfSight": 311
     },
+    "Render": {
+      "RenderJobToView": 464,
+      "RenderViewToDevice": 8
+    },
+    "RenderQueue": {
+      "AlwaysOnTop": 13,
+      "AlwaysOnTopAdorns": 14,
+      "Decals": 2,
+      "Glass": 8,
+      "GlassTint": 7,
+      "OnTopReadOnlyDepth": 12,
+      "OnTopWithDepth": 11,
+      "Opaque": 0,
+      "OpaqueAdorns": 4,
+      "OpaqueCasters": 3,
+      "OpaqueWithAlpha": 5,
+      "Screen": 15,
+      "ScreenOnTopOfBlur": 16,
+      "Terrain": 1,
+      "Transparent": 9,
+      "TransparentCasters": 10,
+      "Water": 6
+    },
     "RenderView": {
       "LightingValid": 552,
       "SkyboxValid": 653
     },
+    "RobloxExtraSpace": {
+      "Capabilities": 112,
+      "Continuations": 152,
+      "Identity": 72,
+      "Script": 96,
+      "Shared": 24,
+      "capabilities": 104,
+      "identity": 72,
+      "script": 88
+    },
+    "ScriptContext": {
+      "LuaState": 768,
+      "RequireBypass": 2560,
+      "Resume": 2272
+    },
     "Seat": {
-      "Occupant": 528
+      "Occupant": 536
     },
     "SignalConnection": {
       "Enabled": 32,
-      "Next": 16
+      "FunctionScriptSlotSelf": 24,
+      "Next": 16,
+      "SelfWeakFallback": 72,
+      "SlotWrapper": 48,
+      "SlotWrapperFallbackSelf": 64,
+      "SlotWrapperSelf": 56,
+      "WeakChain": 104,
+      "WeakChainNext": 8
+    },
+    "SignalWeakObject": {
+      "FunctionReference": 52,
+      "Pointer": 96,
+      "Thread": 40,
+      "WaitContainer": 80
     },
     "Sky": {
       "MoonAngularSize": 580,
@@ -285,17 +450,38 @@
       "Scale": 196,
       "TextureId": 296
     },
+    "StatsItem": {
+      "Value": 184
+    },
+    "TString": {
+      "hash": 16,
+      "len": 20
+    },
+    "TaskScheduler": {
+      "JobEnd": 208,
+      "JobName": 24,
+      "JobStart": 200,
+      "JobTypeName": 248,
+      "Pointer": 144985448,
+      "ScriptContext": 440
+    },
     "Team": {
+      "BrickColor": 184,
       "TeamColor": 184
     },
+    "TechniqueArray": {
+      "BeginOffset": 0,
+      "EndOffset": 8,
+      "EntryStride": 136
+    },
     "Terrain": {
-      "GrassLength": 488,
-      "MaterialColors": 1200,
-      "WaterColor": 472,
-      "WaterReflectance": 496,
-      "WaterTransparency": 500,
-      "WaterWaveSize": 504,
-      "WaterWaveSpeed": 508
+      "GrassLength": 496,
+      "MaterialColors": 1208,
+      "WaterColor": 480,
+      "WaterReflectance": 504,
+      "WaterTransparency": 508,
+      "WaterWaveSize": 512,
+      "WaterWaveSpeed": 516
     },
     "Tool": {
       "CanBeDropped": 1208,
@@ -309,6 +495,9 @@
       "RequiresHandle": 1211,
       "Tooltip": 1128
     },
+    "UpVal": {
+      "v": 24
+    },
     "Value": {
       "Value": 184
     },
@@ -320,25 +509,38 @@
       "Torque": 564,
       "TurnSpeed": 568
     },
+    "VirtualTable": {
+      "RaiseEventInvocation": 24
+    },
     "VisualEngine": {
-      "FakeDataModel": 2752,
-      "Pointer": 137240872,
-      "RenderView": 3072,
-      "ViewMatrix": 384
+      "FakeDataModel": 2800,
+      "Pointer": 137696264,
+      "RenderView": 3120,
+      "ViewMatrix": 432
     },
     "Workspace": {
-      "CurrentCamera": 1176,
-      "ReadOnlyGravity": 2504,
-      "World": 1008
+      "CurrentCamera": 1208,
+      "ReadOnlyGravity": 2544,
+      "World": 1040
     },
     "World": {
       "Gravity": 552,
-      "Primitives": 680,
-      "WorldSteps": 1824
+      "Primitives": 688,
+      "WorldSteps": 1832
     },
     "WorldRoot": {
-      "RaycastBoundDesc": 134782752,
+      "RaycastBoundDesc": 135242944,
       "RaycastBoundFn": 128
+    },
+    "lua_State": {
+      "base": 48,
+      "ci": 64,
+      "global": 40,
+      "gt": 120,
+      "stack": 32,
+      "status": 3,
+      "top": 24,
+      "userdata": 112
     }
   }
 }
